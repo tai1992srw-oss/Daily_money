@@ -58,6 +58,18 @@ app/src/main/java/com/dailybudget/
 ### DailyBalance (日次残高テーブル)
 - 日付、残高、繰越額
 
+## ダイエット機能（カロリータブ）
+
+下部タブの「カロリー」で、今日の摂取・消費カロリーの収支を確認できます。
+
+- **食事の記録**: Claude のチャット/Cowork に食べたものを送ると、カロリー・PFC が推定され
+  Google スプレッドシート「ダイエットログ」に記録されます（`/meal-log` スキル）
+- **消費カロリー・歩数**: Pixel Watch → Fitbit → Health Connect 経由でアプリが取得し、
+  スプレッドシートにも書き戻します
+- **連携方法**: スプレッドシートに紐付けた GAS Web アプリ（`gas/Code.gs`）を API として使用
+
+セットアップ手順は [docs/diet-setup.md](docs/diet-setup.md) を参照してください。
+
 ## ビルド方法
 
 1. Android Studio で プロジェクトを開く

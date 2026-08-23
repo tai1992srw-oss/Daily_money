@@ -22,3 +22,10 @@ val TextSecondary = Color(0xFF757575)
 // Additional colors
 val IncomeColor = Color(0xFF4CAF50)
 val ExpenseColor = Color(0xFFF44336)
+
+// Diet colors
+val DietGreen = Color(0xFF43A047)
+val DietTeal = Color(0xFF00897B)
+val ProteinColor = Color(0xFFE57373)
+val FatColor = Color(0xFFFFB74D)
+val CarbsColor = Color(0xFF64B5F6)
