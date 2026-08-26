@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.dailybudget"
+    namespace = "com.dietlog"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.dailybudget"
+        applicationId = "com.dietlog"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -73,11 +73,6 @@ dependencies {
     // ViewModel Compose
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
-
-    // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
 
     // Hilt
     implementation("com.google.dagger:hilt-android:2.48.1")

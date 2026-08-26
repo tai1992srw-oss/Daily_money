@@ -1,18 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Daily Budget</string>
-    <string name="today_budget">今日使える予算</string>
-    <string name="add_expense">支出</string>
-    <string name="add_income">収入</string>
-    <string name="today_records">今日の記録</string>
-    <string name="amount">金額</string>
-    <string name="memo">メモ</string>
-    <string name="category">カテゴリー</string>
-    <string name="save">保存</string>
-    <string name="cancel">キャンセル</string>
-    <string name="initial_setup">初期設定</string>
-    <string name="set_daily_budget">1日あたりの予算を\n設定してください</string>
-    <string name="start">開始</string>
-    <string name="can_change_later">※後から変更できます</string>
-    <string name="yen">円</string>
+    <string name="app_name">ダイエットログ</string>
 </resources>
