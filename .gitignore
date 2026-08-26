@@ -81,3 +81,6 @@ lint-results_files/
 
 # Mac
 .DS_Store
+
+# Diet bot local secrets (GAS URL + token)
+.claude/diet-bot.local.json
