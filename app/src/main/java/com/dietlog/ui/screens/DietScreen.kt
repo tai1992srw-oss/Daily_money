@@ -6,9 +6,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +29,7 @@ import com.dietlog.data.diet.MealTotals
 import com.dietlog.ui.components.AdviceCard
 import com.dietlog.ui.components.DietSettingsDialog
 import com.dietlog.ui.components.MealItem
+import com.dietlog.ui.components.WeightChartCard
 import com.dietlog.ui.theme.DietGreen
 import com.dietlog.ui.theme.DietTeal
 import java.text.NumberFormat
@@ -76,8 +81,8 @@ fun DietScreen(
                 DietSettingsDialog(
                     settings = uiState.settings,
                     onDismiss = { viewModel.hideSettings() },
-                    onSave = { apiUrl, token, targetKcal ->
-                        viewModel.saveSettings(apiUrl, token, targetKcal)
+                    onSave = { apiUrl, token, targetKcal, targetProteinG ->
+                        viewModel.saveSettings(apiUrl, token, targetKcal, targetProteinG)
                     }
                 )
             }
@@ -113,6 +118,7 @@ private fun DietSetupPrompt(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 private fun DietContent(
     uiState: DietUiState,
@@ -124,118 +130,140 @@ private fun DietContent(
     val intake = uiState.day?.totals?.kcal ?: 0
     val burned = uiState.activity?.totalKcal?.takeIf { it > 0 }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        DietSummarySection(
-            dateText = uiState.day?.date?.replace('-', '/') ?: "",
-            intake = intake,
-            burned = burned,
-            steps = uiState.activity?.steps,
-            isLoading = uiState.isLoading,
-            onRefresh = onRefresh,
-            onOpenSettings = onOpenSettings,
-            modifier = Modifier.weight(0.42f)
-        )
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = uiState.isLoading,
+        onRefresh = onRefresh
+    )
 
-        LazyColumn(
-            modifier = Modifier
-                .weight(0.58f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (uiState.error != null) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            text = uiState.error,
-                            modifier = Modifier.padding(12.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pullRefresh(pullRefreshState)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            DietSummarySection(
+                dateText = uiState.day?.date?.replace('-', '/') ?: "",
+                intake = intake,
+                burned = burned,
+                steps = uiState.activity?.steps,
+                isLoading = uiState.isLoading,
+                onRefresh = onRefresh,
+                onOpenSettings = onOpenSettings,
+                modifier = Modifier.weight(0.42f)
+            )
 
-            item {
-                TargetProgressCard(
-                    intake = intake,
-                    targetKcal = uiState.settings.targetKcal,
-                    totals = uiState.day?.totals
-                )
-            }
-
-            if (!uiState.hcGranted) {
-                item {
-                    if (uiState.hcAvailable) {
-                        OutlinedButton(
-                            onClick = onRequestPermissions,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Health Connect と連携（歩数・消費カロリー・体重など）")
-                        }
-                    } else {
-                        Text(
-                            text = "Health Connect が利用できないため活動データは表示されません",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-
-            val activity = uiState.activity
-            if (activity != null &&
-                (activity.distanceKm != null || activity.sleepH != null || activity.weightKg != null)
+            LazyColumn(
+                modifier = Modifier
+                    .weight(0.58f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { BodyStatsCard(activity = activity) }
-            }
+                if (uiState.error != null) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Text(
+                                text = uiState.error,
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                }
 
-            val advice = uiState.day?.advice ?: emptyList()
-            if (advice.isNotEmpty()) {
+                item {
+                    TargetProgressCard(
+                        intake = intake,
+                        targetKcal = uiState.settings.targetKcal,
+                        targetProteinG = uiState.settings.targetProteinG,
+                        totals = uiState.day?.totals
+                    )
+                }
+
+                if (!uiState.hcGranted) {
+                    item {
+                        if (uiState.hcAvailable) {
+                            OutlinedButton(
+                                onClick = onRequestPermissions,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Health Connect と連携（歩数・消費カロリー・体重など）")
+                            }
+                        } else {
+                            Text(
+                                text = "Health Connect が利用できないため活動データは表示されません",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                }
+
+                val activity = uiState.activity
+                if (activity != null &&
+                    (activity.distanceKm != null || activity.sleepH != null || activity.weightKg != null)
+                ) {
+                    item { BodyStatsCard(activity = activity) }
+                }
+
+                if (uiState.history.any { it.weightKg != null }) {
+                    item { WeightChartCard(history = uiState.history) }
+                }
+
+                val advice = uiState.day?.advice ?: emptyList()
+                if (advice.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "アドバイス",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    items(advice) { entry ->
+                        AdviceCard(advice = entry)
+                    }
+                }
+
                 item {
                     Text(
-                        text = "アドバイス",
+                        text = "今日の食事",
                         style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
-                items(advice) { entry ->
-                    AdviceCard(advice = entry)
-                }
-            }
 
-            item {
-                Text(
-                    text = "今日の食事",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-
-            val meals = uiState.day?.meals ?: emptyList()
-            if (meals.isEmpty()) {
-                item {
-                    Text(
-                        text = "まだ記録がありません\nClaude に食べたものを送ってみましょう",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp)
-                    )
-                }
-            } else {
-                items(meals) { meal ->
-                    MealItem(meal = meal, numberFormat = numberFormat)
+                val meals = uiState.day?.meals ?: emptyList()
+                if (meals.isEmpty()) {
+                    item {
+                        Text(
+                            text = "まだ記録がありません\nClaude に食べたものを送ってみましょう",
+                            style = MaterialTheme.typography.bodyLarge,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 24.dp)
+                        )
+                    }
+                } else {
+                    items(meals) { meal ->
+                        MealItem(meal = meal, numberFormat = numberFormat)
+                    }
                 }
             }
         }
+
+        PullRefreshIndicator(
+            refreshing = uiState.isLoading,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
@@ -305,7 +333,7 @@ private fun DietSummarySection(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (burned != null) "今日のカロリー収支" else "今日の摂取カロリー",
+                text = if (burned != null) "今日の収支（ウォッチ基準）" else "今日の摂取カロリー",
                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
                 style = MaterialTheme.typography.titleLarge
             )
@@ -331,7 +359,7 @@ private fun DietSummarySection(
         ) {
             SummaryStat(label = "摂取", value = "${numberFormat.format(intake)} kcal")
             SummaryStat(
-                label = "消費",
+                label = "消費(ウォッチ)",
                 value = if (burned != null) "${numberFormat.format(burned)} kcal" else "—"
             )
             SummaryStat(
@@ -401,10 +429,13 @@ private fun BodyStat(label: String, value: String) {
 private fun TargetProgressCard(
     intake: Int,
     targetKcal: Int,
+    targetProteinG: Int,
     totals: MealTotals?,
     modifier: Modifier = Modifier
 ) {
     val remaining = targetKcal - intake
+    val protein = (totals?.proteinG ?: 0.0).toInt()
+    val proteinRemaining = targetProteinG - protein
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -436,6 +467,30 @@ private fun TargetProgressCard(
                     .fillMaxWidth()
                     .height(8.dp),
                 color = if (remaining >= 0) DietGreen else MaterialTheme.colorScheme.error
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "タンパク質 目標 ${targetProteinG}g",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = if (proteinRemaining > 0) "あと ${proteinRemaining}g" else "達成（${protein}g）",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = DietTeal
+                )
+            }
+
+            LinearProgressIndicator(
+                progress = (protein.toFloat() / targetProteinG.coerceAtLeast(1)).coerceIn(0f, 1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp),
+                color = DietTeal
             )
 
             if (totals != null) {

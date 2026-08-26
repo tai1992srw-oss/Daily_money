@@ -21,14 +21,17 @@ import com.dietlog.data.diet.DietSettings
 fun DietSettingsDialog(
     settings: DietSettings,
     onDismiss: () -> Unit,
-    onSave: (apiUrl: String, token: String, targetKcal: Int) -> Unit
+    onSave: (apiUrl: String, token: String, targetKcal: Int, targetProteinG: Int) -> Unit
 ) {
     var apiUrl by remember { mutableStateOf(settings.apiUrl) }
     var token by remember { mutableStateOf(settings.token) }
     var targetKcal by remember { mutableStateOf(settings.targetKcal.toString()) }
+    var targetProtein by remember { mutableStateOf(settings.targetProteinG.toString()) }
 
     val target = targetKcal.toIntOrNull()
-    val isValid = apiUrl.isNotBlank() && token.isNotBlank() && target != null && target > 0
+    val protein = targetProtein.toIntOrNull()
+    val isValid = apiUrl.isNotBlank() && token.isNotBlank() &&
+        target != null && target > 0 && protein != null && protein > 0
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -58,11 +61,18 @@ fun DietSettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = targetProtein,
+                    onValueChange = { targetProtein = it },
+                    label = { Text("目標タンパク質 (g/日)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(apiUrl.trim(), token.trim(), target ?: 0) },
+                onClick = { onSave(apiUrl.trim(), token.trim(), target ?: 0, protein ?: 0) },
                 enabled = isValid
             ) {
                 Text("保存")

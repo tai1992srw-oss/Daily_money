@@ -6,7 +6,8 @@ const val DAY_START_HOUR = 5
 data class DietSettings(
     val apiUrl: String = "",
     val token: String = "",
-    val targetKcal: Int = 1800
+    val targetKcal: Int = 1750,
+    val targetProteinG: Int = 125
 ) {
     val isConfigured: Boolean
         get() = apiUrl.isNotBlank() && token.isNotBlank()

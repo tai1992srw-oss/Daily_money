@@ -21,13 +21,15 @@ class DietSettingsStore @Inject constructor(
         val API_URL = stringPreferencesKey("api_url")
         val TOKEN = stringPreferencesKey("token")
         val TARGET_KCAL = intPreferencesKey("target_kcal")
+        val TARGET_PROTEIN_G = intPreferencesKey("target_protein_g")
     }
 
     val settings: Flow<DietSettings> = context.dietDataStore.data.map { prefs ->
         DietSettings(
             apiUrl = prefs[Keys.API_URL] ?: "",
             token = prefs[Keys.TOKEN] ?: "",
-            targetKcal = prefs[Keys.TARGET_KCAL] ?: 1800
+            targetKcal = prefs[Keys.TARGET_KCAL] ?: 1750,
+            targetProteinG = prefs[Keys.TARGET_PROTEIN_G] ?: 125
         )
     }
 
@@ -36,6 +38,7 @@ class DietSettingsStore @Inject constructor(
             prefs[Keys.API_URL] = settings.apiUrl.trim()
             prefs[Keys.TOKEN] = settings.token.trim()
             prefs[Keys.TARGET_KCAL] = settings.targetKcal
+            prefs[Keys.TARGET_PROTEIN_G] = settings.targetProteinG
         }
     }
 }

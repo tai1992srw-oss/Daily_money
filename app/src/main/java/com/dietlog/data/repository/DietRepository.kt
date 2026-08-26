@@ -77,6 +77,14 @@ class DietRepository @Inject constructor(
         return api.fetchDay(settings.apiUrl, settings.token, date)
     }
 
+    /** 今日を含む直近 [days] 日分の日別サマリー（体重グラフ用）。 */
+    suspend fun fetchRecent(days: Int): List<DaySummary> {
+        val settings = settingsStore.settings.first()
+        val to = logicalToday()
+        val from = to.minusDays((days - 1).toLong())
+        return api.fetchRange(settings.apiUrl, settings.token, from.toString(), to.toString())
+    }
+
     /** 指定月の日別サマリー（カレンダー表示用）。 */
     suspend fun fetchMonth(month: YearMonth): List<DaySummary> {
         val settings = settingsStore.settings.first()

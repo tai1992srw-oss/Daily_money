@@ -3,6 +3,7 @@ package com.dietlog.ui.screens
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dietlog.data.diet.ActivityData
+import com.dietlog.data.diet.DaySummary
 import com.dietlog.data.diet.DietDay
 import com.dietlog.data.diet.DietSettings
 import com.dietlog.data.repository.DietRepository
@@ -51,9 +52,9 @@ class DietViewModel @Inject constructor(
         refresh()
     }
 
-    fun saveSettings(apiUrl: String, token: String, targetKcal: Int) {
+    fun saveSettings(apiUrl: String, token: String, targetKcal: Int, targetProteinG: Int) {
         viewModelScope.launch {
-            repository.saveSettings(DietSettings(apiUrl, token, targetKcal))
+            repository.saveSettings(DietSettings(apiUrl, token, targetKcal, targetProteinG))
             _uiState.update { it.copy(showSettings = false) }
             refreshInternal()
         }
@@ -77,12 +78,17 @@ class DietViewModel @Inject constructor(
         checkHealthConnect()
         runCatching { repository.sync() }
             .onSuccess { result ->
+                // 体重グラフ用の履歴。取れなくても今日の表示は続行する
+                val history = runCatching { repository.fetchRecent(HISTORY_DAYS) }
+                    .getOrDefault(emptyList())
+                    .sortedBy { it.date }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         day = result.day,
                         activity = result.activity,
-                        uploadError = result.activityUploadError
+                        uploadError = result.activityUploadError,
+                        history = history
                     )
                 }
             }
@@ -100,6 +106,10 @@ class DietViewModel @Inject constructor(
         }.getOrDefault(false)
         _uiState.update { it.copy(hcAvailable = available, hcGranted = granted) }
     }
+
+    companion object {
+        private const val HISTORY_DAYS = 30
+    }
 }
 
 data class DietUiState(
@@ -112,5 +122,6 @@ data class DietUiState(
     val uploadError: Boolean = false,
     val hcAvailable: Boolean = false,
     val hcGranted: Boolean = false,
-    val showSettings: Boolean = false
+    val showSettings: Boolean = false,
+    val history: List<DaySummary> = emptyList()
 )
