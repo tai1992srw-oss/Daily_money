@@ -64,41 +64,40 @@ fun CalendarScreen(
                         modifier = Modifier.padding(32.dp)
                     )
                 }
-                return@Column
-            }
-
-            if (uiState.error != null) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    )
-                ) {
-                    Text(
-                        text = uiState.error ?: "",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
+            } else {
+                if (uiState.error != null) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        )
+                    ) {
+                        Text(
+                            text = uiState.error ?: "",
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
                 }
+
+                WeekdayHeader()
+                MonthGrid(
+                    month = uiState.month,
+                    today = uiState.today,
+                    days = uiState.days,
+                    onDayClick = { viewModel.selectDay(it) }
+                )
+
+                Text(
+                    text = "🟢 収支マイナス（消費が上回った日）　🔴 収支プラス　💡 アドバイスあり",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
-
-            WeekdayHeader()
-            MonthGrid(
-                month = uiState.month,
-                today = uiState.today,
-                days = uiState.days,
-                onDayClick = { viewModel.selectDay(it) }
-            )
-
-            Text(
-                text = "🟢 収支マイナス（消費が上回った日）　🔴 収支プラス　💡 アドバイスあり",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
         }
 
         if (uiState.selectedDate != null) {
