@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 皿（ダイエット/食事記録） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,32 m-22,0 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z M54,32 m-15,0 a15,15 0 1,1 30,0 a15,15 0 1,1 -30,0 Z" />
+    <!-- 円（予算） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,60 L52,69 L58,60 L63,60 L56.5,70 L62,70 L62,73 L55,73 L55,76 L62,76 L62,79 L55,79 L55,84 L51,84 L51,79 L44,79 L44,76 L51,76 L51,73 L44,73 L44,70 L49.5,70 L43,60 Z" />
+</vector>

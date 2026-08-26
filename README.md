@@ -1,78 +1,62 @@
-# Daily Budget App
+# ダイエットログ
 
-今日使える予算を一目で確認し、サッと記録できるシンプルな家計簿アプリ
+Claude と連携するダイエット管理 Android アプリ。
+食事はチャットで Claude に伝えて記録し、活動データは Pixel Watch (Health Connect) から取得。
+データはすべて Google スプレッドシートに集約され、アプリは「今日のカロリー収支」と「カレンダー」を表示する。
+
+```
+Pixel Watch ─▶ Fitbit ─▶ Health Connect ─▶ アプリ ─┐（活動データを書き込み）
+                                                    ▼
+Claude チャット（食事・アドバイス）──▶ GAS Web API ──▶ スプレッドシート「ダイエットログ」
+                                                    │
+アプリ ◀── 食事ログ・収支・アドバイスを取得 ◀──────┘
+```
+
+※ 元の家計簿アプリ (Daily Budget) は `main` ブランチにあります。本ブランチで別アプリ
+（applicationId: `com.dietlog`）として独立しました。
+
+## 主な機能
+
+- **今日タブ**: カロリー収支（摂取−消費）、目標カロリー進捗、PFC、距離・睡眠・体重、
+  Claude からのアドバイス、食事一覧
+- **カレンダータブ**: 月表示で日々の収支を色分け表示（🟢収支マイナス/🔴プラス/💡アドバイスあり）、
+  日タップで詳細（食事・活動・アドバイス）
+- **食事記録**: Claude チャット / Cowork の `/meal-log` スキルで記録（カロリー・PFC自動推定）
+- **レビュー**: `/diet-review` スキルで講評を生成し、アドバイスシートに保存 → アプリで見返せる
+- **日付境界は午前5時**: 深夜0〜5時の食事は前日としてカウント（GAS・アプリ共通）
+- **Health Connect**: 歩数・総消費/活動消費カロリー・距離・睡眠・体重を取得しシートへ書き戻し
 
 ## 技術スタック
 
-- **言語**: Kotlin
-- **UIフレームワーク**: Jetpack Compose
-- **アーキテクチャ**: MVVM (ViewModel + StateFlow)
-- **データベース**: Room (SQLite)
-- **DI**: Hilt
-- **非同期処理**: Coroutines + Flow
-- **最小SDK**: Android 8.0 (API 26)
+- Kotlin / Jetpack Compose / Material3
+- MVVM (ViewModel + StateFlow) / Hilt / Coroutines
+- DataStore（設定保存）
+- Health Connect Client
+- バックエンド: Google Apps Script (`gas/Code.gs`) + Google スプレッドシート
+- 最小SDK: Android 8.0 (API 26)
 
 ## プロジェクト構造
 
 ```
-app/src/main/java/com/dailybudget/
+app/src/main/java/com/dietlog/
 ├── data/
-│   ├── database/         # Room entities, DAOs, Database
-│   ├── model/            # Data models (Category, TransactionType)
-│   └── repository/       # Repository layer
-├── di/                   # Hilt dependency injection modules
+│   ├── diet/             # モデル、GAS APIクライアント、Health Connect、設定ストア
+│   └── repository/       # DietRepository（同期ロジック）
 ├── ui/
-│   ├── components/       # Reusable UI components
-│   ├── screens/          # Screen composables and ViewModels
-│   └── theme/            # App theme, colors, typography
-├── DailyBudgetApplication.kt
+│   ├── components/       # 食事/アドバイスカード、設定ダイアログ
+│   ├── screens/          # 今日 (Diet)、カレンダー (Calendar)
+│   └── theme/
+├── DietLogApplication.kt
 └── MainActivity.kt
+gas/Code.gs               # スプレッドシート側 Web API（デプロイして使う）
+.claude/skills/meal-log/  # 食事記録スキル
+.claude/skills/diet-review/ # レビュー・アドバイス記録スキル
+docs/diet-setup.md        # セットアップ手順
 ```
 
-## 主な機能
+## セットアップ / ビルド
 
-### フェーズ1 (現在実装済み)
-
-- ✅ メイン画面で今日の予算を大きく表示
-- ✅ 支出・収入の入力機能
-- ✅ カテゴリー選択（食費、交通費、日用品、娯楽、その他）
-- ✅ 今日の取引履歴表示
-- ✅ 日付変更時の自動繰越処理
-- ✅ 初回起動時の初期設定ダイアログ
-- ✅ データのローカル保存（Room Database）
-
-### 予算計算ロジック
-
-```
-今日使える予算 = 初期予算 + 前日の残高 + 今日の収入 - 今日の支出
-```
-
-## データベース設計
-
-### Transaction (取引テーブル)
-- 日付、種別（支出/収入）、金額、メモ、カテゴリー、タイムスタンプ
-
-### Settings (設定テーブル)
-- 1日あたりの予算、最終更新日
-
-### DailyBalance (日次残高テーブル)
-- 日付、残高、繰越額
-
-## ビルド方法
-
-1. Android Studio で プロジェクトを開く
-2. Gradle sync を実行
-3. エミュレータまたは実機で実行
-
-## 今後の予定（フェーズ2）
-
-- カテゴリーのカスタマイズ
-- 月次・週次のレポート機能
-- グラフ表示
-- データバックアップ/復元
-- 複数予算管理
-- ホーム画面ウィジェット
-- テーマカラー変更
+[docs/diet-setup.md](docs/diet-setup.md) を参照。ビルドは Android Studio または `./gradlew assembleDebug`。
 
 ## ライセンス
 

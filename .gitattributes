@@ -1,0 +1,15 @@
+# gradlew は sh スクリプトなので必ず LF（CRLF だと Linux/CI で bad interpreter になる）
+gradlew text eol=lf
+*.sh    text eol=lf
+
+# Windows バッチは CRLF
+gradlew.bat text eol=crlf
+*.bat       text eol=crlf
+
+# バイナリは変換しない
+*.jar    binary
+*.apk    binary
+*.aab    binary
+*.keystore binary
+*.jks    binary
+*.png    binary

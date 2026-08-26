@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "com.dailybudget"
+    namespace = "com.dietlog"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.dailybudget"
+        applicationId = "com.dietlog"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -74,11 +74,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.6.2")
 
-    // Room
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-
     // Hilt
     implementation("com.google.dagger:hilt-android:2.48.1")
     ksp("com.google.dagger:hilt-android-compiler:2.48.1")
@@ -89,6 +84,9 @@ dependencies {
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // Health Connect (歩数・消費カロリー)
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha07")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
