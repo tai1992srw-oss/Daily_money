@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-"""店の URL (Google マップ / 食べログ / その他) から店名を取り出す。
+"""店の URL から店名を取り出す。URL の代わりに店名を渡すこともできる。
 
 使い方:
     python place_info.py https://maps.app.goo.gl/xxxx
     python place_info.py https://tabelog.com/tokyo/A1301/.../
+    python place_info.py "もつ焼き琥羽 北戸田店"   # 店名だけのとき
 
-出力: {"ok":true,"name":"店名","url":"<正規化したURL>","source":"maps|tabelog|title"}
+出力: {"ok":true,"name":"店名","url":"<正規化したURL>","source":"maps|tabelog|title|search"}
+URL でなく店名を渡した場合は Google マップの検索 URL を組み立てて source=search で返す
+（アプリのチップをタップするとその名前でマップが開く）。より正確なリンクを残したいときは
+先に WebSearch で店のページを探し、その URL をこのスクリプトに渡すこと。
 名前が取れないときは name を空にして返すので、その場合はユーザーに聞くこと。
 """
 import json
@@ -56,13 +60,28 @@ def name_from_title(html):
     # 「店名 - 場所/ジャンル | 食べログ」「店名 - Google マップ」などの装飾を落とす
     title = re.split(r'\s*[-|｜]\s*', title)[0]
     title = re.sub(r'\s*[（(]食べログ[）)]\s*$', '', title)
+    # 食べログの「〜のご予約」「（もつやき こはね）」のような装飾を落とす
+    title = re.sub(r'\s*[（(][ぁ-んァ-ヶー・\s]+[）)]', '', title)
+    title = re.sub(r'\s*の(ご)?(ネット)?予約\s*$', '', title)
     return title.strip()
+
+
+def search_url(name):
+    """Google マップ URLs API の検索リンク。スマホではマップアプリがそのまま開く。"""
+    return 'https://www.google.com/maps/search/?api=1&query=' + urllib.parse.quote(name)
 
 
 def main():
     if len(sys.argv) < 2:
-        raise SystemExit('usage: place_info.py <url>')
-    given = sys.argv[1]
+        raise SystemExit('usage: place_info.py <url|店名>')
+    given = sys.argv[1].strip()
+
+    # URL でなければ店名として扱い、マップの検索リンクを組み立てて返す
+    if not re.match(r'https?://', given):
+        sys.stdout.write(json.dumps(
+            {'ok': True, 'name': given, 'url': search_url(given), 'source': 'search'}))
+        return
+
     try:
         final_url, html = fetch(given)
     except Exception as err:  # 取得できなくても URL だけは記録できるようにする
