@@ -40,6 +40,17 @@ class DietLogApi @Inject constructor() {
         parseSummaries(json.getJSONArray("days"))
     }
 
+    /** 行った店の一覧（訪問回数・エリアつき）。 */
+    suspend fun fetchPlaces(apiUrl: String, token: String): List<PlaceVisit> =
+        withContext(Dispatchers.IO) {
+            val url = "$apiUrl?token=${encode(token)}&action=places"
+            val json = JSONObject(request(url, postBody = null))
+            if (!json.optBoolean("ok")) {
+                throw IOException("API エラー: ${json.optString("error", "unknown")}")
+            }
+            parsePlaces(json.optJSONArray("places"))
+        }
+
     suspend fun postActivity(
         apiUrl: String,
         token: String,
@@ -85,7 +96,8 @@ class DietLogApi @Inject constructor() {
                         note = m.optString("note"),
                         photoUrl = m.optString("photo_url"),
                         placeName = m.optString("place_name"),
-                        placeUrl = m.optString("place_url")
+                        placeUrl = m.optString("place_url"),
+                        placeArea = m.optString("place_area")
                     )
                 )
             }
@@ -134,6 +146,27 @@ class DietLogApi @Inject constructor() {
         sleepH = doubleOrNull(obj, "sleep_h")?.takeIf { it in 0.0..24.0 },
         weightKg = doubleOrNull(obj, "weight_kg")?.takeIf { it in 20.0..300.0 }
     )
+
+    private fun parsePlaces(arr: JSONArray?): List<PlaceVisit> {
+        if (arr == null) return emptyList()
+        val result = mutableListOf<PlaceVisit>()
+        for (i in 0 until arr.length()) {
+            val p = arr.getJSONObject(i)
+            result.add(
+                PlaceVisit(
+                    name = p.optString("name"),
+                    url = p.optString("url"),
+                    area = p.optString("area"),
+                    visits = p.optInt("visits"),
+                    meals = p.optInt("meals"),
+                    totalKcal = p.optInt("total_kcal"),
+                    firstDate = p.optString("first_date"),
+                    lastDate = p.optString("last_date")
+                )
+            )
+        }
+        return result
+    }
 
     private fun parseSummaries(arr: JSONArray): List<DaySummary> {
         val result = mutableListOf<DaySummary>()

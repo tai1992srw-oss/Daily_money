@@ -8,6 +8,7 @@ import com.dietlog.data.diet.DietLogApi
 import com.dietlog.data.diet.DietSettings
 import com.dietlog.data.diet.DietSettingsStore
 import com.dietlog.data.diet.HealthConnectManager
+import com.dietlog.data.diet.PlaceVisit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -91,5 +92,11 @@ class DietRepository @Inject constructor(
         val from = month.atDay(1).toString()
         val to = month.atEndOfMonth().toString()
         return api.fetchRange(settings.apiUrl, settings.token, from, to)
+    }
+
+    /** 記録に店名が入っている食事から作った「行った店」の一覧（お店タブ用）。 */
+    suspend fun fetchPlaces(): List<PlaceVisit> {
+        val settings = settingsStore.settings.first()
+        return api.fetchPlaces(settings.apiUrl, settings.token)
     }
 }

@@ -40,10 +40,40 @@ data class MealRecord(
     val photoUrl: String = "",
     /** 店名。Google マップ / 食べログの URL から取り込む。 */
     val placeName: String = "",
-    val placeUrl: String = ""
+    val placeUrl: String = "",
+    /** 「埼玉県戸田市」のような地域。お店タブのまとめに使う。 */
+    val placeArea: String = ""
 ) {
     val hasPlace: Boolean
         get() = placeName.isNotBlank() || placeUrl.isNotBlank()
+}
+
+/** 行った店ごとの集計（お店タブ）。 */
+data class PlaceVisit(
+    val name: String,
+    val url: String,
+    val area: String,
+    /** 訪問した日数。同じ日に複数回記録しても1回。 */
+    val visits: Int,
+    /** その店で記録した食事の件数。 */
+    val meals: Int,
+    val totalKcal: Int,
+    val firstDate: String,
+    val lastDate: String
+) {
+    /** 地域のまとめ見出し。「埼玉県戸田市」→「埼玉県」。 */
+    val prefecture: String
+        get() = PREFECTURE_PATTERN.find(area)?.value ?: UNKNOWN_AREA
+
+    /** 都道府県より細かい部分。「埼玉県戸田市」→「戸田市」。 */
+    val locality: String
+        get() = area.removePrefix(prefecture).trim()
+
+    companion object {
+        const val UNKNOWN_AREA = "エリア未設定"
+        private val PREFECTURE_PATTERN =
+            Regex("^(北海道|東京都|京都府|大阪府|.{2,3}?県)")
+    }
 }
 
 data class MealTotals(

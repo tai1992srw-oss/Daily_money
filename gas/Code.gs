@@ -29,7 +29,7 @@ const ADVICE_SHEET = 'アドバイス';
 
 const ACTIVITY_HEADER = ['日付', '歩数', '総消費(kcal)', '活動消費(kcal)', '距離(km)', '睡眠(h)', '体重(kg)', '更新時刻'];
 // 食事ログの J〜L 列（A〜I は既存のまま。無ければ初回アクセス時に見出しだけ足す）
-const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL'];
+const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL', '店エリア'];
 const MEAL_EXTRA_COL = 10; // J列
 const PHOTO_FOLDER_NAME = 'ダイエットログ写真';
 const ADVICE_HEADER = ['日付', '時刻', '種別', '内容'];
@@ -45,6 +45,7 @@ function doGet(e) {
     if (action === 'today') return json_(getDay_(p.date || todayStr_()));
     if (action === 'range') return json_(getRange_(p.from, p.to));
     if (action === 'summary') return json_(getSummaryDays_(Number(p.days || 7)));
+    if (action === 'places') return json_(getPlaces_());
     return json_({ ok: false, error: 'unknown action: ' + action });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -72,7 +73,7 @@ function doPost(e) {
 /**
  * 食事を1件追記する。
  * body: { date?, time?, meal, description, kcal, protein_g?, fat_g?, carbs_g?, note?,
- *          photo_url?, place_name?, place_url? }
+ *          photo_url?, place_name?, place_url?, place_area? }
  * date 省略時は「論理的な今日」（午前5時境界）。time 省略時は現在時刻。
  */
 function addMeal_(body) {
@@ -91,6 +92,7 @@ function addMeal_(body) {
     body.photo_url || '',
     body.place_name || '',
     body.place_url || '',
+    body.place_area || '',
   ];
   const sheet = mealSheet_();
   sheet.appendRow(row);
@@ -192,7 +194,7 @@ function uploadPhoto_(body) {
 
 /**
  * 既存の食事行に写真・店の情報を後付けする（「さっきの店これ」用）。
- * body: { date?, time?, row?, photo_url?, place_name?, place_url?, note? }
+ * body: { date?, time?, row?, photo_url?, place_name?, place_url?, place_area?, note? }
  * row 指定が最優先。無ければ date（既定は今日）の中で time 一致、time も無ければ最終行。
  */
 function updateMeal_(body) {
@@ -222,8 +224,9 @@ function updateMeal_(body) {
   setIf(body.photo_url, MEAL_EXTRA_COL);
   setIf(body.place_name, MEAL_EXTRA_COL + 1);
   setIf(body.place_url, MEAL_EXTRA_COL + 2);
+  setIf(body.place_area, MEAL_EXTRA_COL + 3);
 
-  const saved = sheet.getRange(rowIndex, 1, 1, MEAL_EXTRA_COL + 2).getValues()[0];
+  const saved = sheet.getRange(rowIndex, 1, 1, MEAL_EXTRA_COL + 3).getValues()[0];
   return { ok: true, row: rowIndex, saved: saved };
 }
 
@@ -263,6 +266,57 @@ function getSummaryDays_(days) {
   return { ok: true, days: result };
 }
 
+/**
+ * 記録に店名が入っている食事をまとめて「行った店」の一覧を返す（アプリのお店タブ用）。
+ * 同じ店の同じ日の複数行は1回の訪問として数える。
+ */
+function getPlaces_() {
+  const values = mealSheet_().getDataRange().getValues();
+  const byKey = {};
+
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const name = String(r[10] || '').trim();
+    const url = String(r[11] || '').trim();
+    if (!name && !url) continue;
+
+    const key = name || url;
+    if (!byKey[key]) {
+      byKey[key] = {
+        name: name, url: url, area: String(r[12] || '').trim(),
+        visits: 0, meals: 0, total_kcal: 0, first_date: '', last_date: '', dates: {},
+      };
+    }
+    const e = byKey[key];
+    // 後の行で埋まった URL・エリアも拾う（先に店名だけ記録した場合のため）
+    if (!e.url && url) e.url = url;
+    if (!e.area && r[12]) e.area = String(r[12]).trim();
+    e.meals += 1;
+    e.total_kcal += num_(r[4]);
+
+    const date = dateStr_(r[0]);
+    if (date) {
+      e.dates[date] = true;
+      if (!e.first_date || date < e.first_date) e.first_date = date;
+      if (date > e.last_date) e.last_date = date;
+    }
+  }
+
+  const places = [];
+  Object.keys(byKey).forEach(function (key) {
+    const e = byKey[key];
+    e.visits = Object.keys(e.dates).length;
+    delete e.dates;
+    places.push(e);
+  });
+  // 新しく行った順。同着はよく行く順
+  places.sort(function (a, b) {
+    if (a.last_date !== b.last_date) return a.last_date < b.last_date ? 1 : -1;
+    return b.visits - a.visits;
+  });
+  return { ok: true, places: places };
+}
+
 // -------------------------------------------------------------- data helpers
 
 /** 3シートを一度だけ読み、日付でひけるインデックスを作る。 */
@@ -286,6 +340,7 @@ function loadAll_() {
       photo_url: String(r[9] || ''),
       place_name: String(r[10] || ''),
       place_url: String(r[11] || ''),
+      place_area: String(r[12] || ''),
     });
   }
 

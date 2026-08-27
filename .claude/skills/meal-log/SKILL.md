@@ -79,13 +79,19 @@ Google マップ（`maps.app.goo.gl` / `google.com/maps`）や食べログ（`ta
 python .claude/skills/meal-log/place_info.py '<URL>'
 ```
 
-- `{"ok":true,"name":"店名","url":"..."}` の `name` を `place_name`、`url` を `place_url` に入れる
+- `{"ok":true,"name":"店名","area":"埼玉県戸田市","url":"..."}` の `name` を `place_name`、
+  `url` を `place_url`、`area` を `place_area` に入れる。`place_area` はアプリのお店タブで
+  地域ごとにまとめるのに使うので、**空のまま記録しない**（下記の補い方を参照）
 - `name` が空、または明らかに店名でない（「Google マップ」等）ときはユーザーに店名を聞く。
   ユーザーが発言中に店名を書いていればそれを優先する
 - URL が無くて店名だけ言われたときは `place_name` だけ入れてよい（`place_url` は空）
 - 食事の記録後に URL だけ送られてきたら updateMeal で後付けする:
   `{"token":"<token>","action":"updateMeal","place_name":"〇〇","place_url":"<url>"}`
-- アプリでは食事カードに店名チップが出て、タップでその URL を開く
+- アプリでは食事カードに店名チップが出て、タップでその URL を開く。
+  「お店」タブには行った店が都道府県ごとにまとまり、訪問回数・合計kcal と一緒に並ぶ
+- ユーザーが「行った店の一覧」「マイマップに入れたい」と言ったら、
+  `python .claude/skills/meal-log/places_csv.py` で Google マイマップ取り込み用の
+  CSV を書き出して渡す（インポート手順は docs/diet-setup.md）
 
 ### URL ではなく店名だけ言われたとき
 
@@ -107,6 +113,15 @@ python .claude/skills/meal-log/place_info.py "もつ焼き琥羽 北戸田店"
 Google マップの検索リンク (`source":"search"`) が返る。正確な店ページではないが、アプリの
 チップをタップすればその名前でマップが開くので、記録としては十分。**勝手に別の店の URL を
 当てはめないこと**（間違ったリンクが残るより検索リンクの方がよい）。
+
+### エリア (`place_area`) の補い方
+
+`place_area` が空だとお店タブで「エリア未設定」に入ってしまう。URL から取れなかったときは:
+
+1. ユーザーの発言に地域があれば使う（「北戸田の琥羽」→ `埼玉県戸田市`。
+   都道府県から書く。市区町村まで分かればなお良い）
+2. 同じ店を過去に記録していれば `action=places` の結果から同じ `area` を使う
+3. どうしても分からないときだけ空のままにする（後から updateMeal で足せる）
 
 ## 注意
 

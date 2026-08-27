@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.dietlog.ui.screens.CalendarScreen
 import com.dietlog.ui.screens.DietScreen
+import com.dietlog.ui.screens.PlacesScreen
 import com.dietlog.ui.theme.DietLogTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -73,14 +75,25 @@ private fun AppContent() {
                     },
                     label = { Text("カレンダー") }
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Storefront,
+                            contentDescription = null
+                        )
+                    },
+                    label = { Text("お店") }
+                )
             }
         }
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
-            if (selectedTab == 0) {
-                DietScreen()
-            } else {
-                CalendarScreen()
+            when (selectedTab) {
+                0 -> DietScreen()
+                1 -> CalendarScreen()
+                else -> PlacesScreen()
             }
         }
     }
