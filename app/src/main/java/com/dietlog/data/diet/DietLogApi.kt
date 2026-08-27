@@ -94,7 +94,7 @@ class DietLogApi @Inject constructor() {
                         fatG = m.optDouble("fat_g", 0.0),
                         carbsG = m.optDouble("carbs_g", 0.0),
                         note = m.optString("note"),
-                        photoUrl = m.optString("photo_url"),
+                        photoUrls = parsePhotos(m),
                         placeName = m.optString("place_name"),
                         placeUrl = m.optString("place_url"),
                         placeArea = m.optString("place_area")
@@ -146,6 +146,17 @@ class DietLogApi @Inject constructor() {
         sleepH = doubleOrNull(obj, "sleep_h")?.takeIf { it in 0.0..24.0 },
         weightKg = doubleOrNull(obj, "weight_kg")?.takeIf { it in 20.0..300.0 }
     )
+
+    /** 写真は photos 配列で返る。旧形式（カンマ区切りの1セル）も読めるようにしておく。 */
+    private fun parsePhotos(meal: JSONObject): List<String> {
+        meal.optJSONArray("photos")?.let { arr ->
+            return (0 until arr.length()).map { arr.optString(it) }.filter { it.isNotBlank() }
+        }
+        return meal.optString("photo_url")
+            .split(',', '\n')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
 
     private fun parsePlaces(arr: JSONArray?): List<PlaceVisit> {
         if (arr == null) return emptyList()

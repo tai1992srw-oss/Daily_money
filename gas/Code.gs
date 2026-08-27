@@ -29,6 +29,7 @@ const ADVICE_SHEET = 'アドバイス';
 
 const ACTIVITY_HEADER = ['日付', '歩数', '総消費(kcal)', '活動消費(kcal)', '距離(km)', '睡眠(h)', '体重(kg)', '更新時刻'];
 // 食事ログの J〜L 列（A〜I は既存のまま。無ければ初回アクセス時に見出しだけ足す）
+// 写真URLは複数枚をカンマ区切りで持つ（1枚だけの旧データもそのまま読める）
 const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL', '店エリア'];
 const MEAL_EXTRA_COL = 10; // J列
 const PHOTO_FOLDER_NAME = 'ダイエットログ写真';
@@ -194,8 +195,9 @@ function uploadPhoto_(body) {
 
 /**
  * 既存の食事行に写真・店の情報を後付けする（「さっきの店これ」用）。
- * body: { date?, time?, row?, photo_url?, place_name?, place_url?, place_area?, note? }
+ * body: { date?, time?, row?, photo_url?, photo_append?, place_name?, place_url?, place_area?, note? }
  * row 指定が最優先。無ければ date（既定は今日）の中で time 一致、time も無ければ最終行。
+ * photo_append: true なら既存の写真を残して追記する（写真を2枚目以降として足すとき）。
  */
 function updateMeal_(body) {
   const sheet = mealSheet_();
@@ -221,7 +223,11 @@ function updateMeal_(body) {
     sheet.getRange(rowIndex, col).setValue(value);
   };
   setIf(body.note, 9);
-  setIf(body.photo_url, MEAL_EXTRA_COL);
+  if (body.photo_url && body.photo_append) {
+    setIf(appendPhoto_(values[rowIndex - 1][MEAL_EXTRA_COL - 1], body.photo_url), MEAL_EXTRA_COL);
+  } else {
+    setIf(body.photo_url, MEAL_EXTRA_COL);
+  }
   setIf(body.place_name, MEAL_EXTRA_COL + 1);
   setIf(body.place_url, MEAL_EXTRA_COL + 2);
   setIf(body.place_area, MEAL_EXTRA_COL + 3);
@@ -338,6 +344,7 @@ function loadAll_() {
       carbs_g: num_(r[7]),
       note: String(r[8] || ''),
       photo_url: String(r[9] || ''),
+      photos: photoList_(r[9]),
       place_name: String(r[10] || ''),
       place_url: String(r[11] || ''),
       place_area: String(r[12] || ''),
@@ -480,6 +487,21 @@ function adviceSheet_() {
     sheet.appendRow(ADVICE_HEADER);
   }
   return sheet;
+}
+
+/** カンマ・改行区切りの写真URLを配列にする。 */
+function photoList_(value) {
+  return String(value || '')
+    .split(/[,\n]/)
+    .map(function (v) { return v.trim(); })
+    .filter(function (v) { return v.length > 0; });
+}
+
+/** 既存の写真URLに1枚足す（重複は足さない）。 */
+function appendPhoto_(existing, url) {
+  const list = photoList_(existing);
+  if (list.indexOf(url) < 0) list.push(url);
+  return list.join(',');
 }
 
 // ------------------------------------------------------------- value helpers

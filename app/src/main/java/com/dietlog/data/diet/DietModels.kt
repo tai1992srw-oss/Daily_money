@@ -36,8 +36,8 @@ data class MealRecord(
     val fatG: Double,
     val carbsG: Double,
     val note: String,
-    /** Drive に保存した食事写真（リンク共有）。未登録なら空文字。 */
-    val photoUrl: String = "",
+    /** Drive に保存した食事写真（リンク共有）。1件に何枚でも付けられる。 */
+    val photoUrls: List<String> = emptyList(),
     /** 店名。Google マップ / 食べログの URL から取り込む。 */
     val placeName: String = "",
     val placeUrl: String = "",

@@ -1,5 +1,6 @@
 package com.dietlog.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
@@ -46,7 +49,7 @@ fun MealItem(
     numberFormat: NumberFormat,
     modifier: Modifier = Modifier
 ) {
-    var showPhoto by remember(meal.photoUrl) { mutableStateOf(false) }
+    var showPhoto by remember(meal.photoUrls) { mutableStateOf(false) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -58,16 +61,10 @@ fun MealItem(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (meal.photoUrl.isNotBlank()) {
-                AsyncImage(
-                    model = meal.photoUrl,
-                    contentDescription = "食事の写真",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { showPhoto = true }
+            if (meal.photoUrls.isNotEmpty()) {
+                MealThumbnail(
+                    photoUrls = meal.photoUrls,
+                    onClick = { showPhoto = true }
                 )
                 Spacer(modifier = Modifier.width(12.dp))
             }
@@ -115,7 +112,47 @@ fun MealItem(
     }
 
     if (showPhoto) {
-        PhotoDialog(url = meal.photoUrl, onDismiss = { showPhoto = false })
+        PhotoDialog(urls = meal.photoUrls, onDismiss = { showPhoto = false })
+    }
+}
+
+/** 1枚目をサムネイルに出し、2枚以上あるときは右下に枚数バッジを重ねる。 */
+@Composable
+private fun MealThumbnail(
+    photoUrls: List<String>,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(64.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+    ) {
+        AsyncImage(
+            model = photoUrls.first(),
+            contentDescription = if (photoUrls.size > 1) {
+                "食事の写真 ${photoUrls.size} 枚"
+            } else {
+                "食事の写真"
+            },
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize()
+        )
+        if (photoUrls.size > 1) {
+            Text(
+                text = "${photoUrls.size}枚",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(3.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 5.dp, vertical = 1.dp)
+            )
+        }
     }
 }
 
@@ -156,25 +193,45 @@ private fun PlaceChip(
     }
 }
 
-/** 写真タップで開く拡大表示。どこをタップしても閉じる。 */
+/** 写真タップで開く拡大表示。複数枚は横スワイプで切り替え、タップで閉じる。 */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PhotoDialog(url: String, onDismiss: () -> Unit) {
+private fun PhotoDialog(urls: List<String>, onDismiss: () -> Unit) {
+    if (urls.isEmpty()) return
+    val pagerState = rememberPagerState { urls.size }
+
     Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
-        ) {
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(Color.Black)
-            )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            HorizontalPager(state = pagerState) { page ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = urls[page],
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.Black)
+                    )
+                }
+            }
+            if (urls.size > 1) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${urls.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                )
+            }
         }
     }
 }
