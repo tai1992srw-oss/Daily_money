@@ -105,7 +105,8 @@ function addActivity_(body) {
 
   const pick = function (incoming, colIndex) {
     if (incoming !== null && incoming !== undefined && incoming !== '') return Number(incoming);
-    if (existing) return existing[colIndex];
+    // 既存セルが日付書式に化けていた場合は引き継がず捨てる
+    if (existing && !(existing[colIndex] instanceof Date)) return existing[colIndex];
     return '';
   };
 
@@ -120,12 +121,14 @@ function addActivity_(body) {
     updatedAt,
   ];
 
-  if (rowIndex > 0) {
-    sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
-    return { ok: true, updated: row };
+  if (rowIndex <= 0) {
+    rowIndex = sheet.getLastRow() + 1;
   }
-  sheet.appendRow(row);
-  return { ok: true, added: row };
+  sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+  // 歩数〜体重(B〜G列)を数値書式に固定する。Sheetsの自動判定でセルが
+  // 日付/時刻書式になると、以後そのセルに書く数値がすべて日付に化けるため
+  sheet.getRange(rowIndex, 2, 1, 6).setNumberFormat('0.###');
+  return { ok: true, saved: row };
 }
 
 /**
@@ -353,6 +356,9 @@ function num_(v) {
 
 function numOrNull_(v) {
   if (v === '' || v === null || v === undefined) return null;
+  // セルが日付/時刻書式に化けていると Date が返る（例: 距離0.07が "1899-12-30 1:40" になる）。
+  // 数値列に Date が入っていたら壊れた値として捨てる
+  if (v instanceof Date) return null;
   const n = Number(v);
   return isFinite(n) ? n : null;
 }

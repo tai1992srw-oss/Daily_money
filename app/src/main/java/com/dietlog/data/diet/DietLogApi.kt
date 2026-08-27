@@ -127,9 +127,9 @@ class DietLogApi @Inject constructor() {
         steps = if (obj.isNull("steps")) 0L else obj.optLong("steps"),
         totalKcal = if (obj.isNull("total_kcal")) 0 else obj.optInt("total_kcal"),
         activeKcal = if (obj.isNull("active_kcal")) 0 else obj.optInt("active_kcal"),
-        distanceKm = doubleOrNull(obj, "distance_km"),
-        sleepH = doubleOrNull(obj, "sleep_h"),
-        weightKg = doubleOrNull(obj, "weight_kg")
+        distanceKm = doubleOrNull(obj, "distance_km")?.takeIf { it in 0.0..1000.0 },
+        sleepH = doubleOrNull(obj, "sleep_h")?.takeIf { it in 0.0..24.0 },
+        weightKg = doubleOrNull(obj, "weight_kg")?.takeIf { it in 20.0..300.0 }
     )
 
     private fun parseSummaries(arr: JSONArray): List<DaySummary> {
@@ -143,8 +143,8 @@ class DietLogApi @Inject constructor() {
                     burnedKcal = intOrNull(d, "burned_kcal"),
                     balanceKcal = intOrNull(d, "balance_kcal"),
                     steps = if (d.isNull("steps")) null else d.optLong("steps"),
-                    weightKg = doubleOrNull(d, "weight_kg"),
-                    sleepH = doubleOrNull(d, "sleep_h"),
+                    weightKg = doubleOrNull(d, "weight_kg")?.takeIf { it in 20.0..300.0 },
+                    sleepH = doubleOrNull(d, "sleep_h")?.takeIf { it in 0.0..24.0 },
                     meals = d.optInt("meals"),
                     adviceCount = d.optInt("advice_count")
                 )
