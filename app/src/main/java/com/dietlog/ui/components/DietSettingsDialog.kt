@@ -21,17 +21,20 @@ import com.dietlog.data.diet.DietSettings
 fun DietSettingsDialog(
     settings: DietSettings,
     onDismiss: () -> Unit,
-    onSave: (apiUrl: String, token: String, targetKcal: Int, targetProteinG: Int) -> Unit
+    onSave: (DietSettings) -> Unit
 ) {
     var apiUrl by remember { mutableStateOf(settings.apiUrl) }
     var token by remember { mutableStateOf(settings.token) }
     var targetKcal by remember { mutableStateOf(settings.targetKcal.toString()) }
     var targetProtein by remember { mutableStateOf(settings.targetProteinG.toString()) }
+    var maintenanceKcal by remember { mutableStateOf(settings.maintenanceKcal.toString()) }
 
     val target = targetKcal.toIntOrNull()
     val protein = targetProtein.toIntOrNull()
+    val maintenance = maintenanceKcal.toIntOrNull()
     val isValid = apiUrl.isNotBlank() && token.isNotBlank() &&
-        target != null && target > 0 && protein != null && protein > 0
+        target != null && target > 0 && protein != null && protein > 0 &&
+        maintenance != null && maintenance > target
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -68,11 +71,29 @@ fun DietSettingsDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+                OutlinedTextField(
+                    value = maintenanceKcal,
+                    onValueChange = { maintenanceKcal = it },
+                    label = { Text("維持カロリー／キープライン (kcal/日)") },
+                    supportingText = { Text("ゆるく減量ラインはここから−250で自動計算") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         },
         confirmButton = {
             Button(
-                onClick = { onSave(apiUrl.trim(), token.trim(), target ?: 0, protein ?: 0) },
+                onClick = {
+                    onSave(
+                        settings.copy(
+                            apiUrl = apiUrl.trim(),
+                            token = token.trim(),
+                            targetKcal = target ?: 0,
+                            targetProteinG = protein ?: 0,
+                            maintenanceKcal = maintenance ?: 0
+                        )
+                    )
+                },
                 enabled = isValid
             ) {
                 Text("保存")

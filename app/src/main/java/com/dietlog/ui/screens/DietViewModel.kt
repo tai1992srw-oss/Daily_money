@@ -52,9 +52,9 @@ class DietViewModel @Inject constructor(
         refresh()
     }
 
-    fun saveSettings(apiUrl: String, token: String, targetKcal: Int, targetProteinG: Int) {
+    fun saveSettings(settings: DietSettings) {
         viewModelScope.launch {
-            repository.saveSettings(DietSettings(apiUrl, token, targetKcal, targetProteinG))
+            repository.saveSettings(settings)
             _uiState.update { it.copy(showSettings = false) }
             refreshInternal()
         }

@@ -7,10 +7,24 @@ data class DietSettings(
     val apiUrl: String = "",
     val token: String = "",
     val targetKcal: Int = 1750,
-    val targetProteinG: Int = 125
+    val targetProteinG: Int = 125,
+    /** 維持カロリー（キープライン）。これを超えると増量圏。 */
+    val maintenanceKcal: Int = 2230
 ) {
     val isConfigured: Boolean
         get() = apiUrl.isNotBlank() && token.isNotBlank()
+
+    /** ゆるく減量ライン（週−0.25kgペース ≒ 維持−250kcal）。 */
+    val easyKcal: Int
+        get() = maintenanceKcal - 250
+
+    /** タンパク質の最低ライン（目標=1.6g/kg 相当に対する 1.2g/kg ≒ ×0.75）。 */
+    val minProteinG: Int
+        get() = (targetProteinG * 3) / 4
+
+    /** タンパク質の上限ライン（2.0g/kg ≒ ×1.25。これ以上は追加メリットなし）。 */
+    val maxProteinG: Int
+        get() = (targetProteinG * 5) / 4
 }
 
 data class MealRecord(

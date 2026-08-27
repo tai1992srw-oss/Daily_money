@@ -26,6 +26,8 @@ val ExpenseColor = Color(0xFFF44336)
 // Diet colors
 val DietGreen = Color(0xFF43A047)
 val DietTeal = Color(0xFF00897B)
+val DietAmber = Color(0xFFFFB300)
+val DietOrange = Color(0xFFEF6C00)
 val ProteinColor = Color(0xFFE57373)
 val FatColor = Color(0xFFFFB74D)
 val CarbsColor = Color(0xFF64B5F6)

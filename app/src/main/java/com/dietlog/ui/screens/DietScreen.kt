@@ -1,8 +1,10 @@
 package com.dietlog.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,7 +19,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -25,12 +31,15 @@ import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.dietlog.data.diet.ActivityData
+import com.dietlog.data.diet.DietSettings
 import com.dietlog.data.diet.MealTotals
 import com.dietlog.ui.components.AdviceCard
 import com.dietlog.ui.components.DietSettingsDialog
 import com.dietlog.ui.components.MealItem
 import com.dietlog.ui.components.WeightChartCard
+import com.dietlog.ui.theme.DietAmber
 import com.dietlog.ui.theme.DietGreen
+import com.dietlog.ui.theme.DietOrange
 import com.dietlog.ui.theme.DietTeal
 import java.text.NumberFormat
 import java.util.*
@@ -81,8 +90,8 @@ fun DietScreen(
                 DietSettingsDialog(
                     settings = uiState.settings,
                     onDismiss = { viewModel.hideSettings() },
-                    onSave = { apiUrl, token, targetKcal, targetProteinG ->
-                        viewModel.saveSettings(apiUrl, token, targetKcal, targetProteinG)
+                    onSave = { newSettings ->
+                        viewModel.saveSettings(newSettings)
                     }
                 )
             }
@@ -180,8 +189,7 @@ private fun DietContent(
                 item {
                     TargetProgressCard(
                         intake = intake,
-                        targetKcal = uiState.settings.targetKcal,
-                        targetProteinG = uiState.settings.targetProteinG,
+                        settings = uiState.settings,
                         totals = uiState.day?.totals
                     )
                 }
@@ -428,14 +436,21 @@ private fun BodyStat(label: String, value: String) {
 @Composable
 private fun TargetProgressCard(
     intake: Int,
-    targetKcal: Int,
-    targetProteinG: Int,
+    settings: DietSettings,
     totals: MealTotals?,
     modifier: Modifier = Modifier
 ) {
-    val remaining = targetKcal - intake
+    val targetKcal = settings.targetKcal
+    val easyKcal = settings.easyKcal
+    val keepKcal = settings.maintenanceKcal
     val protein = (totals?.proteinG ?: 0.0).toInt()
-    val proteinRemaining = targetProteinG - protein
+
+    val (bandLabel, bandColor) = when {
+        intake <= targetKcal -> "目標ペース圏内" to DietGreen
+        intake <= easyKcal -> "ゆるく減量圏" to DietAmber
+        intake <= keepKcal -> "キープ圏内" to DietOrange
+        else -> "キープライン超過" to MaterialTheme.colorScheme.error
+    }
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -447,50 +462,84 @@ private fun TargetProgressCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "目標 $targetKcal kcal",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = if (remaining >= 0) "あと $remaining kcal" else "${-remaining} kcal オーバー",
+                    text = "摂取 $intake kcal",
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (remaining >= 0) DietGreen else MaterialTheme.colorScheme.error
+                    fontWeight = FontWeight.Bold
                 )
+                Box(
+                    modifier = Modifier
+                        .background(bandColor.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = bandLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = bandColor
+                    )
+                }
             }
 
-            LinearProgressIndicator(
-                progress = (intake.toFloat() / targetKcal.coerceAtLeast(1)).coerceIn(0f, 1f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp),
-                color = if (remaining >= 0) DietGreen else MaterialTheme.colorScheme.error
+            ZoneBar(
+                value = intake,
+                lines = listOf(targetKcal, easyKcal, keepKcal),
+                fillColor = bandColor
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "タンパク質 目標 ${targetProteinG}g",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    text = if (proteinRemaining > 0) "あと ${proteinRemaining}g" else "達成（${protein}g）",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = DietTeal
-                )
-            }
+            ZoneLineRow(
+                color = DietGreen, label = "目標",
+                lineValue = targetKcal, current = intake, unit = " kcal"
+            )
+            ZoneLineRow(
+                color = DietAmber, label = "ゆるく減量",
+                lineValue = easyKcal, current = intake, unit = " kcal"
+            )
+            ZoneLineRow(
+                color = DietOrange, label = "キープライン",
+                lineValue = keepKcal, current = intake, unit = " kcal"
+            )
 
-            LinearProgressIndicator(
-                progress = (protein.toFloat() / targetProteinG.coerceAtLeast(1)).coerceIn(0f, 1f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp),
-                color = DietTeal
+            Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+            Text(
+                text = "タンパク質 ${protein}g",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            ZoneBar(
+                value = protein,
+                lines = listOf(settings.minProteinG, settings.targetProteinG, settings.maxProteinG),
+                fillColor = DietTeal
+            )
+
+            ZoneLineRow(
+                color = DietOrange,
+                label = "最低",
+                lineValue = settings.minProteinG,
+                current = protein,
+                unit = "g",
+                achievedText = "達成"
+            )
+            ZoneLineRow(
+                color = DietTeal,
+                label = "目標",
+                lineValue = settings.targetProteinG,
+                current = protein,
+                unit = "g",
+                achievedText = "達成"
+            )
+            ZoneLineRow(
+                color = MaterialTheme.colorScheme.outline,
+                label = "上限",
+                lineValue = settings.maxProteinG,
+                current = protein,
+                unit = "g",
+                achievedText = "超過（効果薄）"
             )
 
             if (totals != null) {
@@ -501,5 +550,83 @@ private fun TargetProgressCard(
                 )
             }
         }
+    }
+}
+
+/**
+ * 3本のラインを目盛りとして刻んだ進捗バー。
+ * バーの長さは最大ラインの少し先までをスケールとし、fillColor で現在値を塗る。
+ */
+@Composable
+private fun ZoneBar(
+    value: Int,
+    lines: List<Int>,
+    fillColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val tickColor = MaterialTheme.colorScheme.surface
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(14.dp)
+    ) {
+        val maxLine = lines.max()
+        val maxScale = maxOf(maxLine * 1.06f, value.toFloat())
+        fun xAt(v: Float): Float = (v / maxScale).coerceIn(0f, 1f) * size.width
+
+        val corner = CornerRadius(size.height / 2)
+        drawRoundRect(color = trackColor, cornerRadius = corner)
+        if (value > 0) {
+            drawRoundRect(
+                color = fillColor,
+                size = Size(xAt(value.toFloat()).coerceAtLeast(size.height), size.height),
+                cornerRadius = corner
+            )
+        }
+        lines.forEach { line ->
+            val x = xAt(line.toFloat())
+            drawLine(tickColor, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
+        }
+    }
+}
+
+/** ラインの凡例1行。「● ラベル 値   あと◯」形式で、超えたときは achievedText（省略時は超過表示）。 */
+@Composable
+private fun ZoneLineRow(
+    color: Color,
+    label: String,
+    lineValue: Int,
+    current: Int,
+    unit: String,
+    achievedText: String? = null,
+    modifier: Modifier = Modifier
+) {
+    val diff = lineValue - current
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = "$label $lineValue$unit",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        Text(
+            text = if (diff >= 0) "あと $diff$unit" else (achievedText ?: "${-diff}$unit 超過"),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Bold,
+            color = if (diff >= 0) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else color
+        )
     }
 }
