@@ -35,8 +35,16 @@ data class MealRecord(
     val proteinG: Double,
     val fatG: Double,
     val carbsG: Double,
-    val note: String
-)
+    val note: String,
+    /** Drive に保存した食事写真（リンク共有）。未登録なら空文字。 */
+    val photoUrl: String = "",
+    /** 店名。Google マップ / 食べログの URL から取り込む。 */
+    val placeName: String = "",
+    val placeUrl: String = ""
+) {
+    val hasPlace: Boolean
+        get() = placeName.isNotBlank() || placeUrl.isNotBlank()
+}
 
 data class MealTotals(
     val kcal: Int = 0,

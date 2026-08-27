@@ -1,6 +1,6 @@
 ---
 name: meal-log
-description: 食べたものを伝えるとカロリー・PFCを推定してスプレッドシート「ダイエットログ」に記録する。「/meal-log 唐揚げ定食」のように食事内容を渡す。食事の記録・カロリー計算を頼まれたときに使う。
+description: 食べたものを伝えるとカロリー・PFCを推定してスプレッドシート「ダイエットログ」に記録する。「/meal-log 唐揚げ定食」のように食事内容を渡す。食事の写真を貼られたとき、Google マップや食べログの店URLを送られたときも、写真・店名として同じ記録に残す。食事の記録・カロリー計算を頼まれたときに使う。
 ---
 
 # 食事記録スキル
@@ -19,6 +19,11 @@ description: 食べたものを伝えるとカロリー・PFCを推定してス�
 
 ## 手順
 
+0. **写真・店URLの有無を確認**: ユーザーが画像を貼っていれば「写真あり」、Google マップ /
+   食べログ / その他の店の URL を含んでいれば「店あり」として、下の「写真を記録する」
+   「店を記録する」を先に実行し、得られた `photo_url` / `place_name` / `place_url` を
+   手順3の addMeal に含める。**食事の記録より先に写真・店を解決すること**（後から
+   updateMeal で足すより1回のPOSTで済む）。
 1. **食事内容の解釈**: 引数（または直前のユーザー発言）から食事内容を把握する。
    - 区分（朝食/昼食/夕食/間食）は発言や現在時刻(JST)から推定する（5〜10時:朝食、10〜15時:昼食、15〜18時:間食、18時〜:夕食、0〜5時:夜食→夕食扱い）
    - **日付境界は午前5時**。深夜0〜5時の食事は自動的に「前日」として記録される（GAS側で処理されるので date は渡さなくてよい）
@@ -29,7 +34,7 @@ description: 食べたものを伝えるとカロリー・PFCを推定してス�
 ```bash
 BODY=<scratchpad>/meal.json
 cat > "$BODY" <<'EOF'
-{"token":"<token>","action":"addMeal","meal":"昼食","description":"唐揚げ定食とビール1杯","kcal":1050,"protein_g":38,"fat_g":45,"carbs_g":95,"note":"ビール中ジョッキ含む"}
+{"token":"<token>","action":"addMeal","meal":"昼食","description":"唐揚げ定食とビール1杯","kcal":1050,"protein_g":38,"fat_g":45,"carbs_g":95,"note":"ビール中ジョッキ含む","photo_url":"","place_name":"","place_url":""}
 EOF
 curl -s -L --data-binary @"$BODY" \
   -H 'Content-Type: application/json; charset=utf-8' \
@@ -44,7 +49,43 @@ curl -s -L --data-binary @"$BODY" \
 
    date/time は省略すると現在時刻(JST)になる。過去の食事のみ `"date":"YYYY-MM-DD","time":"HH:mm"` を付ける。
 4. **今日の合計を確認**: `curl -sL '<api_url>?token=<token>&action=today'` で今日の合計を取得する。
-5. **報告**: 記録した内容（推定kcal・PFC）と、今日ここまでの合計摂取カロリーを簡潔に伝える。activity データがあれば消費カロリーとの収支も添える。
+5. **報告**: 記録した内容（推定kcal・PFC）と、今日ここまでの合計摂取カロリーを簡潔に伝える。activity データがあれば消費カロリーとの収支も添える。写真・店を記録したときは一言添える（「写真も保存した」「〇〇として記録した」）。
+
+## 写真を記録する
+
+ユーザーがチャットに食事の写真を貼ったら、Drive に保存して URL を食事ログに残す。
+**写真の中身は必ずカロリー推定にも使う**（何がどれくらい写っているかを見て量を見積もる）。
+
+```bash
+python .claude/skills/meal-log/photo_upload.py            # 会話に貼られた最新の画像
+python .claude/skills/meal-log/photo_upload.py <画像パス>  # ファイルで渡されたとき
+```
+
+- `{"ok":true,"url":"https://drive.google.com/thumbnail?id=...&sz=w1600","id":"..."}` が返るので、
+  この `url` を addMeal の `photo_url` に入れる。アプリの食事カードにサムネイルが出る
+- 貼られた画像は会話ログ（`~/.claude/projects/.../*.jsonl`）から取り出している。スクリプトが
+  「画像が見つかりません」と言うときは、ユーザーに画像ファイルのパスを聞いて引数で渡す
+- 保存先は マイドライブの「ダイエットログ写真」フォルダ。アプリから見えるようリンク共有(閲覧)にしている
+- **食事を記録した後で写真だけ来た**場合は updateMeal で後付けする:
+  `{"token":"<token>","action":"updateMeal","photo_url":"<url>"}` （その日の最後の食事行が対象。
+  別の行に付けるなら `"time":"12:30"` か `"row":15` を足す）
+
+## 店を記録する
+
+Google マップ（`maps.app.goo.gl` / `google.com/maps`）や食べログ（`tabelog.com`）の URL が
+発言に含まれていたら、店名を解決して記録する。
+
+```bash
+python .claude/skills/meal-log/place_info.py '<URL>'
+```
+
+- `{"ok":true,"name":"店名","url":"..."}` の `name` を `place_name`、`url` を `place_url` に入れる
+- `name` が空、または明らかに店名でない（「Google マップ」等）ときはユーザーに店名を聞く。
+  ユーザーが発言中に店名を書いていればそれを優先する
+- URL が無くて店名だけ言われたときは `place_name` だけ入れてよい（`place_url` は空）
+- 食事の記録後に URL だけ送られてきたら updateMeal で後付けする:
+  `{"token":"<token>","action":"updateMeal","place_name":"〇〇","place_url":"<url>"}`
+- アプリでは食事カードに店名チップが出て、タップでその URL を開く
 
 ## 注意
 

@@ -3,14 +3,18 @@
  *
  * スプレッドシート「ダイエットログ」に紐付けて使う Web アプリ。
  * - GET  : 食事・活動・アドバイスの読み取り（today / range / summary）
- * - POST : 食事の追記(addMeal)、活動データのupsert(addActivity)、アドバイスの追記(addAdvice)
+ * - POST : 食事の追記(addMeal)、活動データのupsert(addActivity)、アドバイスの追記(addAdvice)、
+ *          写真の保存(uploadPhoto)、既存の食事への写真・店の後付け(updateMeal)
  *
  * 「1日」は午前5時に切り替わる（DAY_START_HOUR）。深夜2時の食事は前日扱い。
  * セットアップ手順は リポジトリの docs/diet-setup.md を参照。
  *
  * v1 からの更新時: このファイルを丸ごと貼り替え、TOKEN だけ自分の値に戻して
  * 「デプロイ → デプロイを管理 → 編集 → 新バージョン」で反映する（URLは変わらない）。
- * 活動ログのヘッダーは初回アクセス時に自動で新形式に更新される。
+ * 活動ログ・食事ログのヘッダーは初回アクセス時に自動で新形式に更新される。
+ *
+ * 写真は マイドライブの「ダイエットログ写真」フォルダに保存し、アプリから見えるよう
+ * 「リンクを知っている全員が閲覧可」にする（URLを知られなければ他人には見えない）。
  */
 
 // デプロイ前に必ずランダムな文字列に変更すること
@@ -24,6 +28,10 @@ const ACTIVITY_SHEET = '活動ログ';
 const ADVICE_SHEET = 'アドバイス';
 
 const ACTIVITY_HEADER = ['日付', '歩数', '総消費(kcal)', '活動消費(kcal)', '距離(km)', '睡眠(h)', '体重(kg)', '更新時刻'];
+// 食事ログの J〜L 列（A〜I は既存のまま。無ければ初回アクセス時に見出しだけ足す）
+const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL'];
+const MEAL_EXTRA_COL = 10; // J列
+const PHOTO_FOLDER_NAME = 'ダイエットログ写真';
 const ADVICE_HEADER = ['日付', '時刻', '種別', '内容'];
 
 // ---------------------------------------------------------------- entrypoints
@@ -51,6 +59,8 @@ function doPost(e) {
     if (body.action === 'addMeal') return json_(addMeal_(body));
     if (body.action === 'addActivity') return json_(addActivity_(body));
     if (body.action === 'addAdvice') return json_(addAdvice_(body));
+    if (body.action === 'uploadPhoto') return json_(uploadPhoto_(body));
+    if (body.action === 'updateMeal') return json_(updateMeal_(body));
     return json_({ ok: false, error: 'unknown action: ' + body.action });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -61,7 +71,8 @@ function doPost(e) {
 
 /**
  * 食事を1件追記する。
- * body: { date?, time?, meal, description, kcal, protein_g?, fat_g?, carbs_g?, note? }
+ * body: { date?, time?, meal, description, kcal, protein_g?, fat_g?, carbs_g?, note?,
+ *          photo_url?, place_name?, place_url? }
  * date 省略時は「論理的な今日」（午前5時境界）。time 省略時は現在時刻。
  */
 function addMeal_(body) {
@@ -77,9 +88,13 @@ function addMeal_(body) {
     num_(body.fat_g),
     num_(body.carbs_g),
     body.note || '',
+    body.photo_url || '',
+    body.place_name || '',
+    body.place_url || '',
   ];
-  mealSheet_().appendRow(row);
-  return { ok: true, added: row };
+  const sheet = mealSheet_();
+  sheet.appendRow(row);
+  return { ok: true, added: row, row: sheet.getLastRow() };
 }
 
 /**
@@ -148,6 +163,70 @@ function addAdvice_(body) {
   return { ok: true, added: row };
 }
 
+/**
+ * 食事の写真を Drive に保存し、アプリから表示できる URL を返す。
+ * body: { data(base64), mime?, filename? }
+ * 保存先は マイドライブ直下の「ダイエットログ写真」フォルダ。
+ * 画像はアプリ（未ログイン）から読めるようリンク共有(閲覧)にする。
+ */
+function uploadPhoto_(body) {
+  if (!body.data) return { ok: false, error: 'data (base64) is required' };
+  const mime = body.mime || 'image/jpeg';
+  const ext = mime.indexOf('png') >= 0 ? 'png' : mime.indexOf('webp') >= 0 ? 'webp' : 'jpg';
+  const stamp = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd_HHmmss');
+  const base = String(body.filename || '').replace(/\.[A-Za-z0-9]+$/, '').replace(/[\/:*?"<>|]/g, '_');
+  const name = (base ? stamp + '_' + base : stamp) + '.' + ext;
+
+  const blob = Utilities.newBlob(Utilities.base64Decode(body.data), mime, name);
+  const file = photoFolder_().createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  const id = file.getId();
+  return {
+    ok: true,
+    id: id,
+    // thumbnail エンドポイントは認証なしで画像バイトを返すのでアプリ表示向き
+    url: 'https://drive.google.com/thumbnail?id=' + id + '&sz=w1600',
+    view_url: 'https://drive.google.com/file/d/' + id + '/view',
+  };
+}
+
+/**
+ * 既存の食事行に写真・店の情報を後付けする（「さっきの店これ」用）。
+ * body: { date?, time?, row?, photo_url?, place_name?, place_url?, note? }
+ * row 指定が最優先。無ければ date（既定は今日）の中で time 一致、time も無ければ最終行。
+ */
+function updateMeal_(body) {
+  const sheet = mealSheet_();
+  const values = sheet.getDataRange().getValues();
+  let rowIndex = Number(body.row || 0);
+
+  if (!rowIndex) {
+    const date = body.date || todayStr_();
+    const time = body.time ? timeStr_(body.time) : '';
+    for (let i = 1; i < values.length; i++) {
+      if (dateStr_(values[i][0]) !== date) continue;
+      if (time && timeStr_(values[i][1]) !== time) continue;
+      rowIndex = i + 1;
+    }
+    if (!rowIndex) return { ok: false, error: 'meal not found for ' + date + (time ? ' ' + time : '') };
+  }
+  if (rowIndex < 2 || rowIndex > sheet.getLastRow()) {
+    return { ok: false, error: 'invalid row: ' + rowIndex };
+  }
+
+  const setIf = function (value, col) {
+    if (value === null || value === undefined || value === '') return;
+    sheet.getRange(rowIndex, col).setValue(value);
+  };
+  setIf(body.note, 9);
+  setIf(body.photo_url, MEAL_EXTRA_COL);
+  setIf(body.place_name, MEAL_EXTRA_COL + 1);
+  setIf(body.place_url, MEAL_EXTRA_COL + 2);
+
+  const saved = sheet.getRange(rowIndex, 1, 1, MEAL_EXTRA_COL + 2).getValues()[0];
+  return { ok: true, row: rowIndex, saved: saved };
+}
+
 /** 指定日の食事一覧・合計・活動データ・アドバイスを返す。 */
 function getDay_(date) {
   const db = loadAll_();
@@ -204,6 +283,9 @@ function loadAll_() {
       fat_g: num_(r[6]),
       carbs_g: num_(r[7]),
       note: String(r[8] || ''),
+      photo_url: String(r[9] || ''),
+      place_name: String(r[10] || ''),
+      place_url: String(r[11] || ''),
     });
   }
 
@@ -286,7 +368,29 @@ function mealSheet_() {
     sheet = ss.getSheets()[0];
     sheet.setName(MEAL_SHEET);
   }
+  // v2 (9列) からの見出し移行。写真・店の列が無ければ足す
+  const extras = sheet.getRange(1, MEAL_EXTRA_COL, 1, MEAL_EXTRA_HEADER.length).getValues()[0];
+  if (String(extras[0]) !== MEAL_EXTRA_HEADER[0]) {
+    sheet.getRange(1, MEAL_EXTRA_COL, 1, MEAL_EXTRA_HEADER.length).setValues([MEAL_EXTRA_HEADER]);
+  }
   return sheet;
+}
+
+/** 写真の保存先フォルダ（無ければ作る）。ID は Script Properties にキャッシュする。 */
+function photoFolder_() {
+  const props = PropertiesService.getScriptProperties();
+  const cached = props.getProperty('PHOTO_FOLDER_ID');
+  if (cached) {
+    try {
+      return DriveApp.getFolderById(cached);
+    } catch (err) {
+      props.deleteProperty('PHOTO_FOLDER_ID'); // 削除された場合は作り直す
+    }
+  }
+  const it = DriveApp.getFoldersByName(PHOTO_FOLDER_NAME);
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder(PHOTO_FOLDER_NAME);
+  props.setProperty('PHOTO_FOLDER_ID', folder.getId());
+  return folder;
 }
 
 function activitySheet_() {

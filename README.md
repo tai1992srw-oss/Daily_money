@@ -22,6 +22,8 @@ Claude チャット（食事・アドバイス）──▶ GAS Web API ──▶
 - **カレンダータブ**: 月表示で日々の収支を色分け表示（🟢収支マイナス/🔴プラス/💡アドバイスあり）、
   日タップで詳細（食事・活動・アドバイス）
 - **食事記録**: Claude チャット / Cowork の `/meal-log` スキルで記録（カロリー・PFC自動推定）
+- **写真・店の記録**: 食事の写真を貼ると Drive に保存してカードにサムネイル表示（タップで拡大）、
+  Google マップ / 食べログの URL を送ると店名を解決して記録（チップをタップでその店を開く）
 - **レビュー**: `/diet-review` スキルで講評を生成し、アドバイスシートに保存 → アプリで見返せる
 - **日付境界は午前5時**: 深夜0〜5時の食事は前日としてカウント（GAS・アプリ共通）
 - **Health Connect**: 歩数・総消費/活動消費カロリー・距離・睡眠・体重を取得しシートへ書き戻し
@@ -49,7 +51,7 @@ app/src/main/java/com/dietlog/
 ├── DietLogApplication.kt
 └── MainActivity.kt
 gas/Code.gs               # スプレッドシート側 Web API（デプロイして使う）
-.claude/skills/meal-log/  # 食事記録スキル
+.claude/skills/meal-log/  # 食事記録スキル（写真アップロード・店名解決スクリプト同梱）
 .claude/skills/diet-review/ # レビュー・アドバイス記録スキル
 docs/diet-setup.md        # セットアップ手順
 ```

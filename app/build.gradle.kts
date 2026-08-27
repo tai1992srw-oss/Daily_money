@@ -13,8 +13,8 @@ android {
         applicationId = "com.dietlog"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -86,6 +86,9 @@ dependencies {
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
+
+    // 食事写真の読み込み（Drive のリンク共有 URL を表示）
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // Health Connect (歩数・消費カロリー)
     implementation("androidx.health.connect:connect-client:1.1.0-alpha07")

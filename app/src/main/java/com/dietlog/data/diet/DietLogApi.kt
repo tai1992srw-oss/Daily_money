@@ -82,7 +82,10 @@ class DietLogApi @Inject constructor() {
                         proteinG = m.optDouble("protein_g", 0.0),
                         fatG = m.optDouble("fat_g", 0.0),
                         carbsG = m.optDouble("carbs_g", 0.0),
-                        note = m.optString("note")
+                        note = m.optString("note"),
+                        photoUrl = m.optString("photo_url"),
+                        placeName = m.optString("place_name"),
+                        placeUrl = m.optString("place_url")
                     )
                 )
             }

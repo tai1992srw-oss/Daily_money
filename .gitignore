@@ -84,3 +84,7 @@ lint-results_files/
 
 # Diet bot local secrets (GAS URL + token)
 .claude/diet-bot.local.json
+
+# Python (skill スクリプトの実行時キャッシュ)
+__pycache__/
+*.pyc
