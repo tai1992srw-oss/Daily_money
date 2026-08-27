@@ -30,7 +30,22 @@ def name_from_maps_url(url):
     if not m:
         return ''
     name = urllib.parse.unquote_plus(m.group(1))
-    return name.strip()
+    return strip_address(name.strip())
+
+
+def strip_address(name):
+    """「〒335-0021 埼玉県… もつ焼き琥羽 北戸田店」から店名だけ取り出す。
+
+    共有リンクの place 部分は住所つきの表記になることがあるので、
+    郵便番号と都道府県から始まる住所を落とす。落とし切って空になるなら元のまま返す。
+    """
+    if not name.startswith('〒'):
+        return name
+    parts = [p for p in name.split(' ') if p]
+    rest = parts[1:]
+    if rest and re.search(r'[都道府県]', rest[0]):
+        rest = rest[1:]
+    return ' '.join(rest).strip() or name
 
 
 def name_from_title(html):

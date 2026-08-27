@@ -20,7 +20,8 @@ import os
 import sys
 import urllib.request
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # .claude/ の親
+# .claude/skills/meal-log/ から3つ上がリポジトリのルート
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 CONFIG = os.path.join(ROOT, '.claude', 'diet-bot.local.json')
 MAX_BYTES = 12 * 1024 * 1024  # GAS の POST 上限に対する安全域
 
