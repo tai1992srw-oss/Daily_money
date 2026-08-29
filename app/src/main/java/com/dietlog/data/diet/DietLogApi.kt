@@ -54,7 +54,8 @@ class DietLogApi @Inject constructor() {
     suspend fun postActivity(
         apiUrl: String,
         token: String,
-        activity: ActivityData
+        activity: ActivityData,
+        date: String? = null
     ): Unit = withContext(Dispatchers.IO) {
         val payload = JSONObject()
             .put("token", token)
@@ -62,6 +63,7 @@ class DietLogApi @Inject constructor() {
             .put("steps", activity.steps)
             .put("total_kcal", activity.totalKcal)
             .put("active_kcal", activity.activeKcal)
+        date?.let { payload.put("date", it) }
         activity.distanceKm?.let { payload.put("distance_km", it) }
         activity.sleepH?.let { payload.put("sleep_h", it) }
         activity.weightKg?.let { payload.put("weight_kg", it) }

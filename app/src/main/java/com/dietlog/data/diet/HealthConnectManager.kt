@@ -51,13 +51,40 @@ class HealthConnectManager @Inject constructor(
         client.permissionController.getGrantedPermissions().containsAll(permissions)
 
     suspend fun readTodayActivity(): ActivityData {
+        val dayStart = logicalDayStart()
+        return readActivityBetween(
+            start = dayStart.toInstant(),
+            end = Instant.now(),
+            // 今日の体重は「直近90日で最新」を出す（今朝まだ乗っていなくても前回値を表示）
+            weightKg = readLatestWeight(Instant.now())
+        )
+    }
+
+    /**
+     * 前日（5時境界の丸1日）の確定値。日をまたいだ後の同期で前日の行を締めるのに使う。
+     * 体重だけは前日の枠内で計測されたものに限定する（古い値で手入力の修正を潰さないため）。
+     */
+    suspend fun readYesterdayActivity(): ActivityData {
+        val dayStart = logicalDayStart()
+        val start = dayStart.minusDays(1).toInstant()
+        val end = dayStart.toInstant()
+        return readActivityBetween(start, end, weightKg = readWeightBetween(start, end))
+    }
+
+    /** 論理的な「今日」の開始時刻（直近の朝5時）。 */
+    private fun logicalDayStart(): ZonedDateTime {
         val zone = ZoneId.systemDefault()
         val now = ZonedDateTime.now(zone)
         var dayStart = now.toLocalDate().atTime(DAY_START_HOUR, 0).atZone(zone)
         if (now.isBefore(dayStart)) dayStart = dayStart.minusDays(1)
-        val start = dayStart.toInstant()
-        val end = now.toInstant()
+        return dayStart
+    }
 
+    private suspend fun readActivityBetween(
+        start: Instant,
+        end: Instant,
+        weightKg: Double?
+    ): ActivityData {
         val agg = client.aggregate(
             AggregateRequest(
                 metrics = setOf(
@@ -78,8 +105,21 @@ class HealthConnectManager @Inject constructor(
                 ?: 0.0).roundToInt(),
             distanceKm = agg[DistanceRecord.DISTANCE_TOTAL]?.inKilometers?.let { round1(it) },
             sleepH = readSleepHours(start, end),
-            weightKg = readLatestWeight(end)
+            weightKg = weightKg
         )
+    }
+
+    /** 指定期間内で最新の体重。なければ null（nullならシートの既存値が保持される）。 */
+    private suspend fun readWeightBetween(start: Instant, end: Instant): Double? {
+        val response = client.readRecords(
+            ReadRecordsRequest(
+                recordType = WeightRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(start, end),
+                ascendingOrder = false,
+                pageSize = 1
+            )
+        )
+        return response.records.firstOrNull()?.weight?.inKilograms?.let { round1(it) }
     }
 
     /** 直近90日で最新の体重。なければ null。 */

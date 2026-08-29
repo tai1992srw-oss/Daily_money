@@ -61,6 +61,20 @@ class DietRepository @Inject constructor(
             runCatching {
                 api.postActivity(settings.apiUrl, settings.token, activity)
             }.onFailure { uploadFailed = true }
+
+            // 前日の行を確定値で締める。今日の分しか書かないと、5時境界をまたいだ後の
+            // 消費カロリーが前日最後の同期の値のまま凍結されるため
+            runCatching {
+                val yesterday = healthConnect.readYesterdayActivity()
+                if (yesterday.totalKcal > 0 || yesterday.steps > 0) {
+                    api.postActivity(
+                        settings.apiUrl,
+                        settings.token,
+                        yesterday,
+                        date = logicalToday().minusDays(1).toString()
+                    )
+                }
+            }
         }
 
         val day = api.fetchDay(settings.apiUrl, settings.token)
