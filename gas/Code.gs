@@ -47,6 +47,7 @@ function doGet(e) {
     if (action === 'range') return json_(getRange_(p.from, p.to));
     if (action === 'summary') return json_(getSummaryDays_(Number(p.days || 7)));
     if (action === 'places') return json_(getPlaces_());
+    if (action === 'placeMeals') return json_(getPlaceMeals_(p.name || ''));
     return json_({ ok: false, error: 'unknown action: ' + action });
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -321,6 +322,42 @@ function getPlaces_() {
     return b.visits - a.visits;
   });
   return { ok: true, places: places };
+}
+
+/**
+ * 指定した店で食べた記録の一覧（お店タブの詳細画面用）。日付の新しい順に返す。
+ * 店名の一致で拾う。店名が空で URL だけ記録された行は URL 一致でも拾う。
+ */
+function getPlaceMeals_(name) {
+  if (!name) return { ok: false, error: 'name is required' };
+  const values = mealSheet_().getDataRange().getValues();
+  const meals = [];
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const rowName = String(r[10] || '').trim();
+    const rowUrl = String(r[11] || '').trim();
+    if (rowName !== name && rowUrl !== name) continue;
+    meals.push({
+      date: dateStr_(r[0]),
+      time: timeStr_(r[1]),
+      meal: String(r[2] || ''),
+      description: String(r[3] || ''),
+      kcal: num_(r[4]),
+      protein_g: num_(r[5]),
+      fat_g: num_(r[6]),
+      carbs_g: num_(r[7]),
+      note: String(r[8] || ''),
+      photos: photoList_(r[9]),
+      place_name: rowName,
+      place_url: rowUrl,
+      place_area: String(r[12] || ''),
+    });
+  }
+  meals.sort(function (a, b) {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return a.time < b.time ? -1 : 1;
+  });
+  return { ok: true, name: name, meals: meals };
 }
 
 // -------------------------------------------------------------- data helpers

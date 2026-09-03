@@ -1,5 +1,6 @@
 package com.dietlog.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,15 +20,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -43,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.dietlog.data.diet.PlaceVisit
+import com.dietlog.ui.components.MealItem
 import com.dietlog.ui.theme.DietTeal
 import java.text.NumberFormat
 import java.util.Locale
@@ -58,6 +64,22 @@ fun PlacesScreen(
         refreshing = uiState.isLoading,
         onRefresh = { viewModel.refresh() }
     )
+
+    // 詳細画面が開いているときは戻るボタンで一覧へ
+    BackHandler(enabled = uiState.selectedPlace != null) {
+        viewModel.closePlace()
+    }
+
+    val selected = uiState.selectedPlace
+    if (selected != null) {
+        PlaceDetail(
+            place = selected,
+            uiState = uiState,
+            numberFormat = numberFormat,
+            onBack = { viewModel.closePlace() }
+        )
+        return
+    }
 
     Box(
         modifier = Modifier
@@ -88,7 +110,8 @@ fun PlacesScreen(
                 uiState = uiState,
                 numberFormat = numberFormat,
                 onSelectSort = { viewModel.setSort(it) },
-                onTogglePrefecture = { viewModel.togglePrefecture(it) }
+                onTogglePrefecture = { viewModel.togglePrefecture(it) },
+                onSelectPlace = { viewModel.selectPlace(it) }
             )
         }
 
@@ -106,7 +129,8 @@ private fun PlacesList(
     uiState: PlacesUiState,
     numberFormat: NumberFormat,
     onSelectSort: (PlaceSort) -> Unit,
-    onTogglePrefecture: (String) -> Unit
+    onTogglePrefecture: (String) -> Unit,
+    onSelectPlace: (PlaceVisit) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -179,6 +203,7 @@ private fun PlacesList(
                     place = place,
                     showLocality = section.title != null,
                     numberFormat = numberFormat,
+                    onClick = { onSelectPlace(place) },
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
             }
@@ -191,22 +216,16 @@ private fun PlaceCard(
     place: PlaceVisit,
     showLocality: Boolean,
     numberFormat: NumberFormat,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val uriHandler = LocalUriHandler.current
     // エリア順のときは見出しに都道府県が出ているので、市区町村だけ見せる
     val areaLabel = if (showLocality) place.locality else place.area
 
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .then(
-                if (place.url.isNotBlank()) {
-                    Modifier.clickable { uriHandler.openUri(place.url) }
-                } else {
-                    Modifier
-                }
-            ),
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -291,5 +310,142 @@ private fun EmptyMessage(
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             textAlign = TextAlign.Center
         )
+    }
+}
+
+/**
+ * 店の詳細画面：訪問回数などのサマリー、地図リンク、
+ * その店で食べた全記録（日付ごと・写真つき）。
+ */
+@Composable
+private fun PlaceDetail(
+    place: PlaceVisit,
+    uiState: PlacesUiState,
+    numberFormat: NumberFormat,
+    onBack: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, end = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "一覧に戻る"
+                    )
+                }
+                Text(
+                    text = place.name.ifBlank { "(店名なし)" },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        item {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                val stats = buildList {
+                    if (place.area.isNotBlank()) add(place.area)
+                    add("訪問 ${place.visits} 回")
+                    add("記録 ${place.meals} 件")
+                    if (place.totalKcal > 0) add("計 ${numberFormat.format(place.totalKcal)} kcal")
+                }
+                Text(
+                    text = stats.joinToString(" ・ "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                if (place.firstDate.isNotBlank()) {
+                    Text(
+                        text = "初回 ${place.firstDate.replace('-', '/')} ・ " +
+                            "最終 ${place.lastDate.replace('-', '/')}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+                if (place.url.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = { uriHandler.openUri(place.url) },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Place,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("地図・店ページを開く")
+                    }
+                }
+            }
+        }
+
+        when {
+            uiState.placeMealsLoading -> item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            uiState.placeMealsError != null -> item {
+                Text(
+                    text = uiState.placeMealsError,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+
+            else -> {
+                uiState.placeVisitDays.forEach { day ->
+                    item(key = "day-${day.date}") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = day.date.replace('-', '/'),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = DietTeal
+                            )
+                            Text(
+                                text = "${numberFormat.format(day.totalKcal)} kcal",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    }
+                    items(day.meals) { meal ->
+                        MealItem(
+                            meal = meal,
+                            numberFormat = numberFormat,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@ import com.dietlog.data.diet.DietLogApi
 import com.dietlog.data.diet.DietSettings
 import com.dietlog.data.diet.DietSettingsStore
 import com.dietlog.data.diet.HealthConnectManager
+import com.dietlog.data.diet.PlaceMeal
 import com.dietlog.data.diet.PlaceVisit
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -112,5 +113,11 @@ class DietRepository @Inject constructor(
     suspend fun fetchPlaces(): List<PlaceVisit> {
         val settings = settingsStore.settings.first()
         return api.fetchPlaces(settings.apiUrl, settings.token)
+    }
+
+    /** 指定した店で食べた記録の一覧（お店タブの詳細画面用）。 */
+    suspend fun fetchPlaceMeals(name: String): List<PlaceMeal> {
+        val settings = settingsStore.settings.first()
+        return api.fetchPlaceMeals(settings.apiUrl, settings.token, name)
     }
 }

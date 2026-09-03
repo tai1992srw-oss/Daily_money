@@ -49,6 +49,12 @@ data class MealRecord(
 }
 
 /** 行った店ごとの集計（お店タブ）。 */
+/** お店の詳細画面に出す1件の食事記録（日付つき）。 */
+data class PlaceMeal(
+    val date: String,
+    val record: MealRecord
+)
+
 data class PlaceVisit(
     val name: String,
     val url: String,

@@ -40,6 +40,40 @@ class DietLogApi @Inject constructor() {
         parseSummaries(json.getJSONArray("days"))
     }
 
+    /** 指定した店で食べた記録の一覧（新しい日付順）。お店タブの詳細画面用。 */
+    suspend fun fetchPlaceMeals(
+        apiUrl: String,
+        token: String,
+        name: String
+    ): List<PlaceMeal> = withContext(Dispatchers.IO) {
+        val url = "$apiUrl?token=${encode(token)}&action=placeMeals&name=${encode(name)}"
+        val json = JSONObject(request(url, postBody = null))
+        if (!json.optBoolean("ok")) {
+            throw IOException("API エラー: ${json.optString("error", "unknown")}")
+        }
+        val arr = json.optJSONArray("meals") ?: return@withContext emptyList()
+        (0 until arr.length()).map { i ->
+            val m = arr.getJSONObject(i)
+            PlaceMeal(
+                date = m.optString("date"),
+                record = MealRecord(
+                    time = m.optString("time"),
+                    meal = m.optString("meal"),
+                    description = m.optString("description"),
+                    kcal = m.optInt("kcal"),
+                    proteinG = m.optDouble("protein_g", 0.0),
+                    fatG = m.optDouble("fat_g", 0.0),
+                    carbsG = m.optDouble("carbs_g", 0.0),
+                    note = m.optString("note"),
+                    photoUrls = parsePhotos(m),
+                    placeName = m.optString("place_name"),
+                    placeUrl = m.optString("place_url"),
+                    placeArea = m.optString("place_area")
+                )
+            )
+        }
+    }
+
     /** 行った店の一覧（訪問回数・エリアつき）。 */
     suspend fun fetchPlaces(apiUrl: String, token: String): List<PlaceVisit> =
         withContext(Dispatchers.IO) {
