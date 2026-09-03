@@ -28,9 +28,10 @@ const ACTIVITY_SHEET = '活動ログ';
 const ADVICE_SHEET = 'アドバイス';
 
 const ACTIVITY_HEADER = ['日付', '歩数', '総消費(kcal)', '活動消費(kcal)', '距離(km)', '睡眠(h)', '体重(kg)', '更新時刻'];
-// 食事ログの J〜L 列（A〜I は既存のまま。無ければ初回アクセス時に見出しだけ足す）
+// 食事ログの J 列以降（A〜I は既存のまま。無ければ初回アクセス時に見出しだけ足す）
 // 写真URLは複数枚をカンマ区切りで持つ（1枚だけの旧データもそのまま読める）
-const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL', '店エリア'];
+// 感想＝本人のレビュー（メモ列は計算根拠用と分離）、評価＝1〜5の星
+const MEAL_EXTRA_HEADER = ['写真URL', '店名', '店URL', '店エリア', '感想', '評価'];
 const MEAL_EXTRA_COL = 10; // J列
 const PHOTO_FOLDER_NAME = 'ダイエットログ写真';
 const ADVICE_HEADER = ['日付', '時刻', '種別', '内容'];
@@ -75,7 +76,7 @@ function doPost(e) {
 /**
  * 食事を1件追記する。
  * body: { date?, time?, meal, description, kcal, protein_g?, fat_g?, carbs_g?, note?,
- *          photo_url?, place_name?, place_url?, place_area? }
+ *          photo_url?, place_name?, place_url?, place_area?, comment?, rating? }
  * date 省略時は「論理的な今日」（午前5時境界）。time 省略時は現在時刻。
  */
 function addMeal_(body) {
@@ -95,6 +96,8 @@ function addMeal_(body) {
     body.place_name || '',
     body.place_url || '',
     body.place_area || '',
+    body.comment || '',
+    body.rating ? Number(body.rating) : '',
   ];
   const sheet = mealSheet_();
   sheet.appendRow(row);
@@ -196,7 +199,8 @@ function uploadPhoto_(body) {
 
 /**
  * 既存の食事行に写真・店の情報を後付けする（「さっきの店これ」用）。
- * body: { date?, time?, row?, photo_url?, photo_append?, place_name?, place_url?, place_area?, note? }
+ * body: { date?, time?, row?, photo_url?, photo_append?, place_name?, place_url?, place_area?,
+ *          note?, comment?, rating? }
  * row 指定が最優先。無ければ date（既定は今日）の中で time 一致、time も無ければ最終行。
  * photo_append: true なら既存の写真を残して追記する（写真を2枚目以降として足すとき）。
  */
@@ -232,8 +236,10 @@ function updateMeal_(body) {
   setIf(body.place_name, MEAL_EXTRA_COL + 1);
   setIf(body.place_url, MEAL_EXTRA_COL + 2);
   setIf(body.place_area, MEAL_EXTRA_COL + 3);
+  setIf(body.comment, MEAL_EXTRA_COL + 4);
+  setIf(body.rating, MEAL_EXTRA_COL + 5);
 
-  const saved = sheet.getRange(rowIndex, 1, 1, MEAL_EXTRA_COL + 3).getValues()[0];
+  const saved = sheet.getRange(rowIndex, 1, 1, MEAL_EXTRA_COL + 5).getValues()[0];
   return { ok: true, row: rowIndex, saved: saved };
 }
 
@@ -292,6 +298,7 @@ function getPlaces_() {
       byKey[key] = {
         name: name, url: url, area: String(r[12] || '').trim(),
         visits: 0, meals: 0, total_kcal: 0, first_date: '', last_date: '', dates: {},
+        rating_sum: 0, rating_count: 0,
       };
     }
     const e = byKey[key];
@@ -300,6 +307,11 @@ function getPlaces_() {
     if (!e.area && r[12]) e.area = String(r[12]).trim();
     e.meals += 1;
     e.total_kcal += num_(r[4]);
+    const rating = numOrNull_(r[14]);
+    if (rating) {
+      e.rating_sum += rating;
+      e.rating_count += 1;
+    }
 
     const date = dateStr_(r[0]);
     if (date) {
@@ -314,6 +326,10 @@ function getPlaces_() {
     const e = byKey[key];
     e.visits = Object.keys(e.dates).length;
     delete e.dates;
+    // 星をつけた食事があれば平均評価（★の平均、0.1刻み）
+    e.avg_rating = e.rating_count ? Math.round((e.rating_sum / e.rating_count) * 10) / 10 : null;
+    delete e.rating_sum;
+    delete e.rating_count;
     places.push(e);
   });
   // 新しく行った順。同着はよく行く順
@@ -351,6 +367,8 @@ function getPlaceMeals_(name) {
       place_name: rowName,
       place_url: rowUrl,
       place_area: String(r[12] || ''),
+      comment: String(r[13] || ''),
+      rating: numOrNull_(r[14]),
     });
   }
   meals.sort(function (a, b) {
@@ -385,6 +403,8 @@ function loadAll_() {
       place_name: String(r[10] || ''),
       place_url: String(r[11] || ''),
       place_area: String(r[12] || ''),
+      comment: String(r[13] || ''),
+      rating: numOrNull_(r[14]),
     });
   }
 
@@ -469,7 +489,11 @@ function mealSheet_() {
   }
   // v2 (9列) からの見出し移行。写真・店の列が無ければ足す
   const extras = sheet.getRange(1, MEAL_EXTRA_COL, 1, MEAL_EXTRA_HEADER.length).getValues()[0];
-  if (String(extras[0]) !== MEAL_EXTRA_HEADER[0]) {
+  // 先頭または末尾（後から追加した列）の見出しが無ければ書き直す
+  if (
+    String(extras[0]) !== MEAL_EXTRA_HEADER[0] ||
+    String(extras[MEAL_EXTRA_HEADER.length - 1]) !== MEAL_EXTRA_HEADER[MEAL_EXTRA_HEADER.length - 1]
+  ) {
     sheet.getRange(1, MEAL_EXTRA_COL, 1, MEAL_EXTRA_HEADER.length).setValues([MEAL_EXTRA_HEADER]);
   }
   return sheet;

@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.dietlog.data.diet.AdviceEntry
 import com.dietlog.data.diet.MealRecord
+import com.dietlog.ui.theme.DietAmber
 import com.dietlog.ui.theme.DietTeal
 import java.text.NumberFormat
 
@@ -100,6 +101,29 @@ fun MealItem(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
+                }
+                // 本人の感想と星は、計算メモより目立つレビュー風に出す
+                if (meal.rating != null || meal.comment.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        meal.rating?.let { stars ->
+                            Text(
+                                text = "★".repeat(stars.coerceIn(1, 5)),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = DietAmber
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        if (meal.comment.isNotBlank()) {
+                            Text(
+                                text = "💬 ${meal.comment}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))

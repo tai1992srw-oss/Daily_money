@@ -68,7 +68,9 @@ class DietLogApi @Inject constructor() {
                     photoUrls = parsePhotos(m),
                     placeName = m.optString("place_name"),
                     placeUrl = m.optString("place_url"),
-                    placeArea = m.optString("place_area")
+                    placeArea = m.optString("place_area"),
+                    comment = m.optString("comment"),
+                    rating = intOrNull(m, "rating")
                 )
             )
         }
@@ -133,7 +135,9 @@ class DietLogApi @Inject constructor() {
                         photoUrls = parsePhotos(m),
                         placeName = m.optString("place_name"),
                         placeUrl = m.optString("place_url"),
-                        placeArea = m.optString("place_area")
+                        placeArea = m.optString("place_area"),
+                        comment = m.optString("comment"),
+                        rating = intOrNull(m, "rating")
                     )
                 )
             }
@@ -208,7 +212,8 @@ class DietLogApi @Inject constructor() {
                     meals = p.optInt("meals"),
                     totalKcal = p.optInt("total_kcal"),
                     firstDate = p.optString("first_date"),
-                    lastDate = p.optString("last_date")
+                    lastDate = p.optString("last_date"),
+                    avgRating = doubleOrNull(p, "avg_rating")
                 )
             )
         }

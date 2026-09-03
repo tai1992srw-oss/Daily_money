@@ -19,7 +19,8 @@ import javax.inject.Inject
 enum class PlaceSort(val label: String) {
     AREA("エリア順"),
     VISITS("よく行く順"),
-    RECENT("最近行った順")
+    RECENT("最近行った順"),
+    RATING("うまい順")
 }
 
 @HiltViewModel
@@ -169,6 +170,17 @@ data class PlacesUiState(
 
             PlaceSort.RECENT -> listOf(
                 PlaceSection(null, filtered.sortedByDescending { it.lastDate })
+            )
+
+            // 星の平均が高い順。未評価の店は最後（同着は訪問回数順）
+            PlaceSort.RATING -> listOf(
+                PlaceSection(
+                    null,
+                    filtered.sortedWith(
+                        compareByDescending<PlaceVisit> { it.avgRating ?: 0.0 }
+                            .thenByDescending { it.visits }
+                    )
+                )
             )
         }
 

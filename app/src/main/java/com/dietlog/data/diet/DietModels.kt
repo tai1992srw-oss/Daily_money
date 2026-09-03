@@ -42,7 +42,11 @@ data class MealRecord(
     val placeName: String = "",
     val placeUrl: String = "",
     /** 「埼玉県戸田市」のような地域。お店タブのまとめに使う。 */
-    val placeArea: String = ""
+    val placeArea: String = "",
+    /** 本人の感想（レビュー・日記）。計算根拠を書く note とは分ける。 */
+    val comment: String = "",
+    /** 1〜5の星評価。未評価なら null。 */
+    val rating: Int? = null
 ) {
     val hasPlace: Boolean
         get() = placeName.isNotBlank() || placeUrl.isNotBlank()
@@ -65,7 +69,9 @@ data class PlaceVisit(
     val meals: Int,
     val totalKcal: Int,
     val firstDate: String,
-    val lastDate: String
+    val lastDate: String,
+    /** 星をつけた食事の平均評価（0.1刻み）。未評価の店は null。 */
+    val avgRating: Double? = null
 ) {
     /** 地域のまとめ見出し。「埼玉県戸田市」→「埼玉県」。 */
     val prefecture: String

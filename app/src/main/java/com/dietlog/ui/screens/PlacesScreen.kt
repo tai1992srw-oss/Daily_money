@@ -258,6 +258,7 @@ private fun PlaceCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 val details = buildList {
+                    place.avgRating?.let { add("★$it") }
                     if (areaLabel.isNotBlank()) add(areaLabel)
                     if (place.lastDate.isNotBlank()) add("最終 ${place.lastDate.replace('-', '/')}")
                     if (place.totalKcal > 0) add("計 ${numberFormat.format(place.totalKcal)} kcal")
@@ -358,6 +359,7 @@ private fun PlaceDetail(
         item {
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 val stats = buildList {
+                    place.avgRating?.let { add("★$it") }
                     if (place.area.isNotBlank()) add(place.area)
                     add("訪問 ${place.visits} 回")
                     add("記録 ${place.meals} 件")
