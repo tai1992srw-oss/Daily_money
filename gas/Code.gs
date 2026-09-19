@@ -226,7 +226,8 @@ function updateMeal_(body) {
 
   const setIf = function (value, col) {
     if (value === null || value === undefined || value === '') return;
-    sheet.getRange(rowIndex, col).setValue(value);
+    // "__clear__" を渡すとそのセルを空にできる（誤記録の取り消し用）
+    sheet.getRange(rowIndex, col).setValue(value === '__clear__' ? '' : value);
   };
   setIf(body.description, 4);
   setIf(body.kcal, 5);
