@@ -199,7 +199,7 @@ function uploadPhoto_(body) {
 
 /**
  * 既存の食事行に写真・店の情報や数値の修正を後付けする（「さっきの店これ」用）。
- * body: { date?, time?, row?, description?, kcal?, protein_g?, fat_g?, carbs_g?,
+ * body: { date?, time?, row?, meal?, description?, kcal?, protein_g?, fat_g?, carbs_g?,
  *          photo_url?, photo_append?, place_name?, place_url?, place_area?,
  *          note?, comment?, rating? }
  * row 指定が最優先。無ければ date（既定は今日）の中で time 一致、time も無ければ最終行。
@@ -229,6 +229,7 @@ function updateMeal_(body) {
     // "__clear__" を渡すとそのセルを空にできる（誤記録の取り消し用）
     sheet.getRange(rowIndex, col).setValue(value === '__clear__' ? '' : value);
   };
+  setIf(body.meal, 3);
   setIf(body.description, 4);
   setIf(body.kcal, 5);
   setIf(body.protein_g, 6);
