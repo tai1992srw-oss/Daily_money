@@ -43,7 +43,7 @@
 ## テスト
 
 ```
-node --test test/parser.test.js
+node --test test/parser.test.js test/main.test.js
 ```
 
-メールの読み取りと振り分けのロジック（`Parser.js`）だけを対象にしています。シートへの書き込み部分は Apps Script 上での確認が必要です。
+メールの読み取りと、明細 1 行への変換までを対象にしています。Gmail の検索とシートへの書き込み部分は Apps Script 上での確認が必要です。

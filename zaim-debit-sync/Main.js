@@ -1,82 +1,76 @@
 /**
- * デビット利用通知メール（ドコモSMTBネット銀行）→ Zaim 自動登録。
+ * デビット利用通知メール（ドコモSMTBネット銀行）→ スプレッドシート家計簿。
  * Google Apps Script 用。Parser.js と一緒に同じプロジェクトへ貼り付けて使う。
- *
- * 必要なもの:
- *   - ライブラリ OAuth1（ID: 1CXDCY5sqT9ph64fFwSzVtXnbjpSfWdRymafDrtIZ7Z_hwysTY7IIhi7s）
- *   - スクリプト プロパティ ZAIM_CONSUMER_KEY / ZAIM_CONSUMER_SECRET
- *   - （任意）ZAIM_ACCOUNT_NAME … 出金元にしたい Zaim の口座名
+ * 外部サービスの登録やキーは不要（Gmail とスプレッドシートだけを使う）。
  */
 
 var MAIL_FROM = 'post_master@netbk.co.jp';
-var LOOKBACK_DAYS = 3;          // 何日前までのメールを見るか
-var MAX_PER_RUN = 40;           // 1 回の実行で登録する上限
-var DEFAULT_CATEGORY = 'その他';
-var DEFAULT_GENRE = '未分類';
+var LOOKBACK_DAYS = 3;          // 定期実行で何日前までのメールを見るか
+var BACKFILL_DAYS = 90;         // backfill() でさかのぼる日数
+var DEFAULT_CATEGORY = '未分類';
 var RULE_SHEET = 'ルール';
-var LOG_SHEET = 'ログ';
-var LOG_HEADER = ['処理日時', '種別', '承認番号', '利用日', '店名', '金額', 'カテゴリ', 'ジャンル', 'ZaimID', 'メッセージID', '結果'];
+var DETAIL_SHEET = '明細';
+var SUMMARY_SHEET = '月別集計';
+var DETAIL_HEADER = ['利用日', '月', '店名', '金額', 'カテゴリ', '種別', '承認番号', 'メール上の店名', 'メッセージID', 'メモ'];
+// 明細シートの列番号（0 始まり）
+var COL = { date: 0, month: 1, store: 2, amount: 3, category: 4, kind: 5, approval: 6, rawStore: 7, messageId: 8, memo: 9 };
 
 var SEED_RULES = [
-  ['LAWSON', '食費', '食料品', 'ローソン'],
-  ['SEVEN-ELEVEN', '食費', '食料品', 'セブン-イレブン'],
-  ['FAMILYMART', '食費', '食料品', 'ファミリーマート'],
-  ['ROCKETNOW', '食費', 'その他', 'Rocket Now'],
-  ['EAST JAPAN RAILWAY', '交通', '電車', 'JR東日本'],
-  ['SUICA', '交通', '電車', 'Suica チャージ'],
-  ['HELLO CYCLING', '交通', 'その他', 'HELLO CYCLING'],
-  ['SOKA KENKO CENTER', 'エンタメ', 'レジャー', '草加健康センター']
+  ['LAWSON', '食費', 'ローソン'],
+  ['SEVEN-ELEVEN', '食費', 'セブン-イレブン'],
+  ['FAMILYMART', '食費', 'ファミリーマート'],
+  ['ROCKETNOW', '食費', 'Rocket Now'],
+  ['EAST JAPAN RAILWAY', '交通', 'JR東日本'],
+  ['SUICA', '交通', 'Suica チャージ'],
+  ['HELLO CYCLING', '交通', 'HELLO CYCLING'],
+  ['SOKA KENKO CENTER', '娯楽', '草加健康センター']
 ];
 
-// ---------- 初期設定 ----------
-
-/** 最初に 1 回実行する。記録用スプレッドシートと 15 分おきのトリガーを作る。 */
+/** 最初に 1 回実行する。スプレッドシートと 15 分おきのトリガーを作る。 */
 function setup() {
   var ss = getSpreadsheet_();
-  Logger.log('ルールとログのシート: ' + ss.getUrl());
-
   var exists = ScriptApp.getProjectTriggers().some(function (t) {
     return t.getHandlerFunction() === 'syncDebitMails';
   });
   if (!exists) ScriptApp.newTrigger('syncDebitMails').timeBased().everyMinutes(15).create();
-
-  var service = getZaimService_();
-  Logger.log(service.hasAccess() ? 'Zaim 認証済みです。' : 'Zaim 未認証です。authorize() を実行してください。');
+  Logger.log('家計簿のシート: ' + ss.getUrl());
 }
 
-/** Zaim の認証 URL をログに出す。開いて許可すると連携が完了する。 */
-function authorize() {
-  var service = getZaimService_();
-  if (service.hasAccess()) {
-    Logger.log('すでに認証済みです。');
-    return;
+/** トリガーから 15 分おきに呼ばれる。 */
+function syncDebitMails() {
+  run_(LOOKBACK_DAYS);
+}
+
+/** 過去分をまとめて取り込む。取り込み済みのメールは飛ばすので何度実行してもよい。 */
+function backfill() {
+  run_(BACKFILL_DAYS);
+}
+
+/** 「未分類」の行に、いまのルールを当て直す。ルールを足したあとに実行する。 */
+function reclassify() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(DETAIL_SHEET);
+  var rules = loadRules_(ss);
+  var last = sheet.getLastRow();
+  if (last < 2) return;
+  // 店名とカテゴリの 2 列だけ書き戻す（ほかの列の書式を崩さない）
+  var rows = sheet.getRange(2, 1, last - 1, DETAIL_HEADER.length).getValues();
+  var out = [];
+  var changed = 0;
+  rows.forEach(function (r) {
+    var rule = r[COL.category] === DEFAULT_CATEGORY ? matchRule(r[COL.rawStore], rules) : null;
+    if (rule) {
+      changed++;
+      out.push([rule.displayName || r[COL.store], '', rule.category]);
+    } else {
+      out.push([r[COL.store], '', r[COL.category]]);
+    }
+  });
+  if (changed) {
+    sheet.getRange(2, COL.store + 1, out.length, 1).setValues(out.map(function (o) { return [o[0]]; }));
+    sheet.getRange(2, COL.category + 1, out.length, 1).setValues(out.map(function (o) { return [o[2]]; }));
   }
-  Logger.log('このURLを開いて Zaim で許可してください: ' + service.authorize());
-}
-
-function authCallback(request) {
-  var ok = getZaimService_().handleCallback(request);
-  return HtmlService.createHtmlOutput(ok ? 'Zaim との連携が完了しました。このタブは閉じて大丈夫です。' : '連携に失敗しました。');
-}
-
-/** 認証をやり直したいときに使う。 */
-function resetAuth() {
-  getZaimService_().reset();
-}
-
-function getZaimService_() {
-  var props = PropertiesService.getScriptProperties();
-  var key = props.getProperty('ZAIM_CONSUMER_KEY');
-  var secret = props.getProperty('ZAIM_CONSUMER_SECRET');
-  if (!key || !secret) throw new Error('スクリプト プロパティ ZAIM_CONSUMER_KEY / ZAIM_CONSUMER_SECRET を設定してください');
-  return OAuth1.createService('zaim')
-    .setRequestTokenUrl('https://api.zaim.net/v2/auth/request')
-    .setAuthorizationUrl('https://auth.zaim.net/users/auth')
-    .setAccessTokenUrl('https://api.zaim.net/v2/auth/access')
-    .setConsumerKey(key)
-    .setConsumerSecret(secret)
-    .setCallbackFunction('authCallback')
-    .setPropertyStore(PropertiesService.getUserProperties());
+  Logger.log(changed + ' 行を振り分け直しました');
 }
 
 function getSpreadsheet_() {
@@ -84,190 +78,130 @@ function getSpreadsheet_() {
   var id = props.getProperty('SHEET_ID');
   if (id) return SpreadsheetApp.openById(id);
 
-  var ss = SpreadsheetApp.create('Zaimデビット連携');
+  var ss = SpreadsheetApp.create('デビット家計簿');
   var rules = ss.getSheets()[0].setName(RULE_SHEET);
-  rules.appendRow(['キーワード（店名に含まれる文字）', 'カテゴリ', 'ジャンル', '表示名（空欄ならメールの店名のまま）']);
-  rules.getRange(2, 1, SEED_RULES.length, 4).setValues(SEED_RULES);
+  rules.appendRow(['キーワード（メール上の店名に含まれる文字）', 'カテゴリ', '表示名（空欄ならメールの店名のまま）']);
+  rules.getRange(2, 1, SEED_RULES.length, 3).setValues(SEED_RULES);
   rules.setFrozenRows(1);
-  var log = ss.insertSheet(LOG_SHEET);
-  log.appendRow(LOG_HEADER);
-  log.setFrozenRows(1);
+
+  var detail = ss.insertSheet(DETAIL_SHEET);
+  detail.appendRow(DETAIL_HEADER);
+  detail.setFrozenRows(1);
+  // 「2026-11」「021928」が日付や数値に化けないよう文字列の列にする
+  detail.getRange('B:B').setNumberFormat('@');
+  detail.getRange('G:G').setNumberFormat('@');
+  detail.getRange('A:A').setNumberFormat('yyyy-mm-dd');
+
+  var summary = ss.insertSheet(SUMMARY_SHEET);
+  summary.getRange('A1').setFormula(
+    "=QUERY('" + DETAIL_SHEET + "'!A:E,\"select E, sum(D) where A is not null group by E pivot B label E 'カテゴリ'\",1)");
+
   props.setProperty('SHEET_ID', ss.getId());
   return ss;
 }
 
-// ---------- 本体 ----------
-
-/** トリガーから 15 分おきに呼ばれる。 */
-function syncDebitMails() {
-  run_(false);
+function loadRules_(ss) {
+  return ss.getSheetByName(RULE_SHEET).getDataRange().getValues().slice(1).map(function (r) {
+    return { keyword: r[0], category: r[1], displayName: r[2] };
+  });
 }
 
-/** Zaim には何も送らず、メールの読み取りと振り分け結果だけをログに出す。 */
-function dryRun() {
-  run_(true);
-}
-
-function run_(dry) {
+function run_(days) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
     var ss = getSpreadsheet_();
-    var logSheet = ss.getSheetByName(LOG_SHEET);
-    var logRows = logSheet.getDataRange().getValues().slice(1);
+    var sheet = ss.getSheetByName(DETAIL_SHEET);
+    var existing = sheet.getDataRange().getValues().slice(1);
     var done = {};
-    logRows.forEach(function (r) { done[r[9]] = true; });
+    existing.forEach(function (r) { done[r[COL.messageId]] = true; });
 
     var messages = [];
-    GmailApp.search('from:' + MAIL_FROM + ' subject:デビットカード newer_than:' + LOOKBACK_DAYS + 'd').forEach(function (thread) {
-      thread.getMessages().forEach(function (m) {
-        if (m.getFrom().indexOf(MAIL_FROM) !== -1 && !done[m.getId()]) messages.push(m);
+    var start = 0;
+    while (true) {
+      var threads = GmailApp.search('from:' + MAIL_FROM + ' subject:デビットカード newer_than:' + days + 'd', start, 100);
+      threads.forEach(function (thread) {
+        thread.getMessages().forEach(function (m) {
+          if (m.getFrom().indexOf(MAIL_FROM) !== -1 && !done[m.getId()]) messages.push(m);
+        });
       });
-    });
+      if (threads.length < 100) break;
+      start += 100;
+    }
     messages.sort(function (a, b) { return a.getDate() - b.getDate(); });
-    messages = messages.slice(0, MAX_PER_RUN);
-    if (!messages.length) return;
 
-    var rules = ss.getSheetByName(RULE_SHEET).getDataRange().getValues().slice(1).map(function (r) {
-      return { keyword: r[0], category: r[1], genre: r[2], displayName: r[3] };
-    });
-    var master = dry ? null : loadMaster_();
-
+    var rules = loadRules_(ss);
+    var added = [];
     messages.forEach(function (m) {
       var tx = parseDebitMail(m.getSubject(), m.getPlainBody());
-      if (tx.kind === 'ignore') {
-        // 利用不可・メンテナンス等。読み取り失敗のときだけ記録を残す。
-        if (tx.reason && !dry) appendLog_(logSheet, logRows, ['', '', '', '', '', '', '', '', m.getId(), '要確認: ' + tx.reason]);
-        else if (!dry) appendLog_(logSheet, logRows, ['対象外', '', '', '', '', '', '', '', m.getId(), 'スキップ']);
-        return;
-      }
-      var row = handle_(tx, rules, master, logRows, dry);
-      if (dry) Logger.log(row.join(' | '));
-      else appendLog_(logSheet, logRows, row.slice(0, 8).concat([m.getId(), row[8]]));
+      if (tx.kind === 'ignore') return;   // 利用不可・メンテナンス等
+      var row = buildRow_(tx, rules, existing.concat(added));
+      if (!row) return;
+      row[COL.messageId] = m.getId();
+      added.push(row);
     });
+    if (added.length) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, added.length, DETAIL_HEADER.length).setValues(added);
+    }
+    Logger.log(added.length + ' 件を追加しました');
   } finally {
     lock.releaseLock();
   }
 }
 
-/** 1 件処理して [種別, 承認番号, 利用日, 店名, 金額, カテゴリ, ジャンル, ZaimID, 結果] を返す。 */
-function handle_(tx, rules, master, logRows, dry) {
+/** 取引 1 件を明細の 1 行にする。書く必要がなければ null。 */
+function buildRow_(tx, rules, rows) {
   var rule = matchRule(tx.store, rules);
-  var storeName = (rule && rule.displayName) || tx.store || '（店名なし）';
-  var category = rule ? rule.category : DEFAULT_CATEGORY;
-  var genre = rule ? rule.genre : DEFAULT_GENRE;
-  var label = { use: '利用', refund: '返金', settle: '売上確定' }[tx.kind];
-  var base = [label, tx.approval, tx.date, storeName, tx.amount];
+  var row = [];
+  row[COL.date] = tx.date;
+  row[COL.month] = tx.date.slice(0, 7);
+  row[COL.store] = (rule && rule.displayName) || tx.store || '（店名なし）';
+  row[COL.amount] = tx.amount;
+  row[COL.category] = rule ? rule.category : DEFAULT_CATEGORY;
+  row[COL.kind] = '利用';
+  row[COL.approval] = tx.approval;
+  row[COL.rawStore] = tx.store;
+  row[COL.messageId] = '';
+  row[COL.memo] = '';
 
-  // 同じ承認番号で登録済みの利用（返金・売上確定の突き合わせ用）
-  // シートは「021928」を数値に変えてしまうので数値で比べる。000000 は承認なしの取引。
+  // 同じ承認番号の利用（000000 は承認なしの取引なので突き合わせない）
   var prior = null;
-  var approvalNo = Number(tx.approval);
-  for (var i = logRows.length - 1; approvalNo && i >= Math.max(0, logRows.length - 500) && !prior; i--) {
-    var r = logRows[i];
-    if (r[1] === '利用' && Number(r[2]) === approvalNo && r[8] && r[10] === '登録') prior = r;
+  if (Number(tx.approval)) {
+    for (var i = rows.length - 1; i >= 0 && !prior; i--) {
+      if (rows[i][COL.kind] === '利用' && Number(rows[i][COL.approval]) === Number(tx.approval)) prior = rows[i];
+    }
   }
 
-  if (tx.currency !== 'JPY') return base.concat(['', '', '', '要確認: 外貨（' + tx.currency + '）のため未登録']);
+  if (tx.currency !== 'JPY') {
+    row[COL.amount] = 0;
+    row[COL.kind] = '要確認';
+    row[COL.memo] = '外貨（' + tx.currency + ' ' + tx.amount + '）のため金額未記入';
+    return row;
+  }
 
   if (tx.kind === 'refund') {
-    if (!prior || Number(prior[5]) !== tx.amount) return base.concat(['', '', '', '要確認: 対応する登録が見つからず未処理']);
-    if (!dry) zaim_('delete', 'home/money/payment/' + prior[8]);
-    return base.concat(['', '', prior[8], dry ? '（テスト）削除予定' : '返金のため削除']);
+    row[COL.amount] = -tx.amount;
+    row[COL.kind] = '返金';
+    if (prior) {
+      row[COL.store] = prior[COL.store];
+      row[COL.category] = prior[COL.category];
+    }
+    return row;
   }
 
-  if (tx.kind === 'settle' && prior) {
-    // 利用時に登録済み。差額調整の可能性があるので金額が違うときだけ知らせる。
-    var same = Number(prior[5]) === tx.amount;
-    return base.concat(['', '', prior[8], same ? '登録済みのためスキップ' : '要確認: 確定金額が利用時（' + prior[5] + '円）と違います']);
+  if (tx.kind === 'settle') {
+    if (prior && Number(prior[COL.amount]) === tx.amount) return null;   // 利用時に記録済み
+    if (prior) {
+      row[COL.amount] = 0;
+      row[COL.kind] = '要確認';
+      row[COL.memo] = '確定金額 ' + tx.amount + ' 円が利用時（' + prior[COL.amount] + ' 円）と違います';
+      return row;
+    }
+    row[COL.kind] = '利用（売上確定）';
   }
-
-  if (dry) return base.concat([category, genre, '', rule ? '（テスト）登録予定' : '（テスト）登録予定・ルールなし']);
-
-  var ids = resolveIds_(master, category, genre);
-  var params = {
-    mapping: 1,
-    category_id: ids.categoryId,
-    genre_id: ids.genreId,
-    amount: tx.amount,
-    date: tx.date,
-    place: storeName.slice(0, 100),
-    comment: 'デビット自動登録 #' + tx.approval + (tx.kind === 'settle' ? '（売上確定）' : '')
-  };
-  if (master.accountId) params.from_account_id = master.accountId;
-  var res = zaim_('post', 'home/money/payment', params);
-  return base.concat([ids.categoryName, ids.genreName, res.money.id, '登録']);
+  return row;
 }
 
-function appendLog_(sheet, logRows, cols) {
-  var row = [new Date()].concat(cols);
-  sheet.appendRow(row);
-  logRows.push(row);
-}
-
-// ---------- Zaim API ----------
-
-function zaim_(method, path, params) {
-  var service = getZaimService_();
-  if (!service.hasAccess()) throw new Error('Zaim 未認証です。authorize() を実行してください');
-  var url = 'https://api.zaim.net/v2/' + path;
-  var options = { method: method, muteHttpExceptions: true };
-  if (params && method === 'get') {
-    url += '?' + Object.keys(params).map(function (k) {
-      return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
-    }).join('&');
-  } else if (params) {
-    options.payload = params;
-  }
-  var res = service.fetch(url, options);
-  if (res.getResponseCode() >= 300) {
-    throw new Error('Zaim API エラー ' + res.getResponseCode() + ' (' + path + '): ' + res.getContentText().slice(0, 300));
-  }
-  return JSON.parse(res.getContentText());
-}
-
-function loadMaster_() {
-  var master = {
-    categories: zaim_('get', 'home/category', { mapping: 1 }).categories.filter(function (c) {
-      return c.mode === 'payment' && c.active !== -1;
-    }),
-    genres: zaim_('get', 'home/genre', { mapping: 1 }).genres.filter(function (g) { return g.active !== -1; }),
-    accountId: null
-  };
-  var accountName = PropertiesService.getScriptProperties().getProperty('ZAIM_ACCOUNT_NAME');
-  if (accountName) {
-    var hit = zaim_('get', 'home/account', { mapping: 1 }).accounts.filter(function (a) {
-      return a.name === accountName && a.active !== -1;
-    })[0];
-    if (!hit) throw new Error('Zaim に口座「' + accountName + '」が見つかりません');
-    master.accountId = hit.id;
-  }
-  return master;
-}
-
-/** カテゴリ名・ジャンル名を ID に直す。見つからなければ既定値、それも無ければ先頭のものを使う。 */
-function resolveIds_(master, categoryName, genreName) {
-  function byName(list, name) {
-    return list.filter(function (x) { return x.name === name; })[0];
-  }
-  var cat = byName(master.categories, categoryName) || byName(master.categories, DEFAULT_CATEGORY) || master.categories[0];
-  var genres = master.genres.filter(function (g) { return g.category_id === cat.id; });
-  var genre = byName(genres, genreName) || byName(genres, DEFAULT_GENRE) || byName(genres, 'その他') || genres[0];
-  if (!genre) throw new Error('カテゴリ「' + cat.name + '」にジャンルがありません');
-  return { categoryId: cat.id, categoryName: cat.name, genreId: genre.id, genreName: genre.name };
-}
-
-// ---------- 診断 ----------
-
-/**
- * 口座連携で入った「デビット」の記録が API から見えるかを調べる。
- * 見えるなら、新しく登録せずにその記録を直接書き換える方式にできる（二重計上が起きない）。
- */
-function checkLinked() {
-  var from = Utilities.formatDate(new Date(Date.now() - 7 * 86400000), 'Asia/Tokyo', 'yyyy-MM-dd');
-  var list = zaim_('get', 'home/money', { mapping: 1, start_date: from, limit: 100 }).money;
-  var linked = list.filter(function (m) { return String(m.place || '').indexOf('デビット') !== -1; });
-  Logger.log('直近7日の記録: ' + list.length + ' 件 / うち店名が「デビット」: ' + linked.length + ' 件');
-  linked.slice(0, 5).forEach(function (m) { Logger.log(JSON.stringify(m)); });
-  if (!linked.length && list.length) Logger.log('参考（先頭1件）: ' + JSON.stringify(list[0]));
+if (typeof module !== 'undefined') {
+  module.exports = { buildRow_: buildRow_, COL: COL };
 }
