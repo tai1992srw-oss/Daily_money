@@ -256,3 +256,18 @@ function resolveIds_(master, categoryName, genreName) {
   if (!genre) throw new Error('カテゴリ「' + cat.name + '」にジャンルがありません');
   return { categoryId: cat.id, categoryName: cat.name, genreId: genre.id, genreName: genre.name };
 }
+
+// ---------- 診断 ----------
+
+/**
+ * 口座連携で入った「デビット」の記録が API から見えるかを調べる。
+ * 見えるなら、新しく登録せずにその記録を直接書き換える方式にできる（二重計上が起きない）。
+ */
+function checkLinked() {
+  var from = Utilities.formatDate(new Date(Date.now() - 7 * 86400000), 'Asia/Tokyo', 'yyyy-MM-dd');
+  var list = zaim_('get', 'home/money', { mapping: 1, start_date: from, limit: 100 }).money;
+  var linked = list.filter(function (m) { return String(m.place || '').indexOf('デビット') !== -1; });
+  Logger.log('直近7日の記録: ' + list.length + ' 件 / うち店名が「デビット」: ' + linked.length + ' 件');
+  linked.slice(0, 5).forEach(function (m) { Logger.log(JSON.stringify(m)); });
+  if (!linked.length && list.length) Logger.log('参考（先頭1件）: ' + JSON.stringify(list[0]));
+}
